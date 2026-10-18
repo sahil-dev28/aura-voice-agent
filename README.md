@@ -66,7 +66,7 @@ Both are declared as blocking, so Aria waits for the real result instead of talk
 - Mock order dates are relative ("delivered 14 days ago", "expected by 6 PM today" IST), so the demo stays correct on any day.
 - There's no customer identity verification before sharing order details. A production agent would verify a phone number or email first.
 - Allowed actions return a reference ID but don't change the mock data, so every tester sees the same three orders.
-- The token endpoint is rate-limited in memory (5 calls per IP per 10 minutes). On serverless, this applies per instance.
+- The token, summary and tool endpoints are rate-limited in memory per IP (5, 10 and 120 calls per 10 minutes). On serverless, this applies per instance; a shared store such as Redis would be needed at scale.
 
 ## Running locally
 
