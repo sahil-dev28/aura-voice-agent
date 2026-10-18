@@ -4,6 +4,7 @@ import express, { type Express } from "express";
 import { env } from "@aura/env/server";
 
 import { orderRouter } from "@/routes/orderRoutes";
+import { tokenRouter } from "@/routes/tokenRoutes";
 import { toolRouter } from "@/routes/toolRoutes";
 
 export const app: Express = express();
@@ -16,6 +17,7 @@ app.get("/api/health", (_req, res) => {
   res.status(200).json({ data: { ok: true } });
 });
 
+app.use("/api/token", tokenRouter);
 app.use("/api/orders", orderRouter);
 app.use("/api/tools", toolRouter);
 
