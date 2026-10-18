@@ -60,8 +60,23 @@ describe("POST /api/summary", () => {
     expect(res.status).toBe(500);
   });
 
+  it("400s when the transcript is over the character cap", async () => {
+    const long = Array.from({ length: 20 }, (_, i) => ({ role: "customer", text: "x".repeat(4000), ts: i }));
+    const res = await request(app).post("/api/summary").send({ transcript: long, toolEvents: [] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/too long/i);
+  });
+
   it("400s on an empty transcript", async () => {
     const res = await request(app).post("/api/summary").send({ transcript: [], toolEvents: [] });
     expect(res.status).toBe(400);
+  });
+
+  it("rate-limits summary requests", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      statuses.push((await request(app).post("/api/summary").send({ transcript: [], toolEvents: [] })).status);
+    }
+    expect(statuses).toContain(429);
   });
 });

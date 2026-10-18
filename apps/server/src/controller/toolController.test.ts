@@ -94,3 +94,13 @@ describe("unknown tools", () => {
     expect(res.body).toEqual({ error: "Unknown tool" });
   });
 });
+
+describe("tool rate limit", () => {
+  it("returns 429 after the per-IP limit", async () => {
+    let last = 0;
+    for (let i = 0; i < 125; i++) {
+      last = (await lookup({ order_id: "ORD-101" })).status;
+    }
+    expect(last).toBe(429);
+  });
+});

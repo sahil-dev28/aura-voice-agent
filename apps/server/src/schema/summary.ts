@@ -22,8 +22,16 @@ export const transcriptEntrySchema = z.object({
   ts: z.number(),
 });
 
+export const MAX_TRANSCRIPT_CHARS = 60_000;
+
 export const summaryRequestSchema = z.object({
-  transcript: z.array(transcriptEntrySchema).min(1, { error: "Transcript is empty" }).max(400),
+  transcript: z
+    .array(transcriptEntrySchema)
+    .min(1, { error: "Transcript is empty" })
+    .max(400)
+    .refine((entries) => entries.reduce((total, entry) => total + entry.text.length, 0) <= MAX_TRANSCRIPT_CHARS, {
+      error: "Transcript is too long",
+    }),
   toolEvents: z.array(z.object({ name: z.string(), args: z.unknown(), result: z.unknown() })).max(50).default([]),
 });
 
