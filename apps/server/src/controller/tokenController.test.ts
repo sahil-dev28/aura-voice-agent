@@ -23,7 +23,7 @@ describe("POST /api/token", () => {
 
     const { config } = create.mock.calls[0]?.[0];
     expect(config.uses).toBe(1);
-    expect(config.lockAdditionalFields).toEqual([]);
+    expect(config).not.toHaveProperty("lockAdditionalFields");
     expect(config.liveConnectConstraints.model).toBe(res.body.data.model);
     expect(String(config.liveConnectConstraints.config.systemInstruction)).toContain("Aria");
     expect(new Date(config.expireTime).getTime()).toBeGreaterThan(Date.now() + 25 * 60_000);

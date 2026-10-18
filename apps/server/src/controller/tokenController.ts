@@ -17,7 +17,6 @@ export const createToken = async (_req: Request, res: Response): Promise<void> =
         expireTime: expiresAt,
         newSessionExpireTime: new Date(now.getTime() + NEW_SESSION_TTL_MS).toISOString(),
         liveConnectConstraints: { model: env.GEMINI_LIVE_MODEL, config: liveConnectConfig(now) },
-        lockAdditionalFields: [],
       },
     });
     if (!token.name) throw new Error("Token response had no name");
