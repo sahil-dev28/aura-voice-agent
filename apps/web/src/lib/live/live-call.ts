@@ -25,6 +25,11 @@ const USER_PAUSE_MS = 700;
 const TOOL_TIMEOUT_MS = 5000;
 const GREETING_TRIGGER = "The customer has just joined the call. Greet them now.";
 
+export function parseDurationMs(duration: string | undefined): number {
+  const seconds = Number.parseFloat(duration ?? "");
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : 0;
+}
+
 function startErrorMessage(error: unknown): string {
   if (error instanceof DOMException && error.name === "NotAllowedError") {
     return "Microphone access is blocked. Allow microphone access for this site and try again.";
@@ -39,7 +44,9 @@ export function createLiveCall(handlers: LiveCallHandlers) {
   let mic: MicRecorder | null = null;
   let player: AudioPlayer | null = null;
   let pauseTimer: ReturnType<typeof setTimeout> | undefined;
+  let goAwayTimer: ReturnType<typeof setTimeout> | undefined;
   let active = false;
+  let runId = 0;
   let transcript: TranscriptEntry[] = [];
   let toolEvents: ToolEvent[] = [];
   const cancelled = new Set<string>();
@@ -51,6 +58,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
 
   const teardown = () => {
     clearTimeout(pauseTimer);
+    clearTimeout(goAwayTimer);
     mic?.stop();
     mic = null;
     session?.close();
@@ -120,11 +128,16 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     }
     for (const id of message.toolCallCancellation?.ids ?? []) cancelled.add(id);
     if (message.toolCall?.functionCalls?.length) void runTools(message.toolCall.functionCalls);
-    if (message.goAway) end();
+    if (message.goAway) {
+      clearTimeout(goAwayTimer);
+      goAwayTimer = setTimeout(end, parseDurationMs(message.goAway.timeLeft));
+    }
   }
 
   async function start() {
     if (active) return;
+    const run = ++runId;
+    const stale = () => run !== runId || !active;
     active = true;
     transcript = [];
     toolEvents = [];
@@ -134,27 +147,37 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     handlers.onEvent({ type: "START" });
 
     try {
-      player = await createAudioPlayer(() => handlers.onEvent({ type: "PLAYBACK_DRAINED" }));
-      if (!active) return teardown();
-      mic = await startMicRecorder((data) =>
-        session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } }),
-      );
-      if (!active) return teardown();
+      const runPlayer = await createAudioPlayer(() => {
+        if (run === runId) handlers.onEvent({ type: "PLAYBACK_DRAINED" });
+      });
+      if (stale()) return runPlayer.close();
+      player = runPlayer;
+      const runMic = await startMicRecorder((data) => {
+        if (run === runId) session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } });
+      });
+      if (stale()) return runMic.stop();
+      mic = runMic;
       const { token, model } = await getToken();
-      if (!active) return teardown();
+      if (stale()) return;
 
       const ai = new GoogleGenAI({ apiKey: token, httpOptions: { apiVersion: "v1alpha" } });
       const connected = await ai.live.connect({
         model,
         callbacks: {
-          onmessage: handleMessage,
-          onerror: () => fail("The call connection failed. Please try again."),
+          onmessage: (message) => {
+            if (run === runId) handleMessage(message);
+          },
+          onerror: () => {
+            if (run === runId) fail("The call connection failed. Please try again.");
+          },
           onclose: (event) => {
-            if (active) fail(event.reason ? `Call disconnected: ${event.reason}` : "The call was disconnected.");
+            if (run === runId && active) {
+              fail(event.reason ? `Call disconnected: ${event.reason}` : "The call was disconnected.");
+            }
           },
         },
       });
-      if (!active) {
+      if (stale()) {
         connected.close();
         return;
       }
@@ -162,7 +185,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       handlers.onEvent({ type: "OPEN" });
       session.sendClientContent({ turns: [{ role: "user", parts: [{ text: GREETING_TRIGGER }] }], turnComplete: true });
     } catch (error) {
-      fail(startErrorMessage(error));
+      if (run === runId) fail(startErrorMessage(error));
     }
   }
 
