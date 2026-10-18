@@ -1,0 +1,11 @@
+import { Router } from "express";
+
+import { checkOrderAction, getOrderDetails, unknownTool } from "@/controller/toolController";
+import { validateData } from "@/middleware/validationMiddleware";
+import { checkOrderActionSchema, getOrderDetailsSchema } from "@/schema/tool";
+
+export const toolRouter: Router = Router();
+
+toolRouter.route("/get_order_details").post(validateData(getOrderDetailsSchema), getOrderDetails);
+toolRouter.route("/check_order_action").post(validateData(checkOrderActionSchema), checkOrderAction);
+toolRouter.route("/:name").post(unknownTool);
