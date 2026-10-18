@@ -1,0 +1,17 @@
+{
+  "extends": "@aura/config/tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": [],
+    "noUnusedLocals": false
+  },
+  "include": [
+    "src"
+  ]
+}

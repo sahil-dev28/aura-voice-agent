@@ -1,14 +1,20 @@
 {
   "name": "aura-assist",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "test": "pnpm -r test",
-    "dev": "pnpm -r --parallel dev"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "test": "turbo run test",
+    "dev:web": "turbo run dev -F web",
+    "dev:server": "turbo run dev -F server"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "devDependencies": {
+    "@aura/config": "workspace:*",
+    "@types/node": "^22.13.14",
+    "turbo": "^2.10.2",
+    "typescript": "catalog:"
+  },
   "packageManager": "pnpm@10.21.0"
 }

@@ -1,0 +1,32 @@
+{
+  "name": "server",
+  "type": "module",
+  "main": "src/app.ts",
+  "scripts": {
+    "build": "tsdown",
+    "check-types": "tsc -b",
+    "dev": "tsx watch src/app.ts",
+    "start": "node dist/app.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aura/env": "workspace:*",
+    "@google/genai": "catalog:",
+    "cors": "^2.8.6",
+    "dotenv": "catalog:",
+    "express": "^5.3.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@aura/config": "workspace:*",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.13.14",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
+    "tsdown": "^0.22.3",
+    "tsx": "^4.23.15",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

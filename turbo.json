@@ -1,0 +1,15 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": ["NEXT_PUBLIC_SERVER_URL", "GEMINI_LIVE_MODEL", "GEMINI_SUMMARY_MODEL", "GEMINI_VOICE"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "check-types": { "dependsOn": ["^check-types"] },
+    "test": { "dependsOn": ["^check-types"] },
+    "dev": { "cache": false, "persistent": true }
+  }
+}
