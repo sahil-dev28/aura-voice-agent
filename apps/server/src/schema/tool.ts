@@ -5,6 +5,7 @@ export type OrderAction = (typeof orderActions)[number];
 
 export const getOrderDetailsSchema = z.object({
   order_id: z.string({ error: "order_id is required" }).trim().min(1, { error: "order_id is required" }).max(40),
+  phone_last4: z.string().trim().max(40).optional(),
 });
 
 export const checkOrderActionSchema = getOrderDetailsSchema.extend({

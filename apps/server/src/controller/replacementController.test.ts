@@ -11,7 +11,7 @@ const upload = (referenceId: string, body: object) =>
   request(app).post(`/api/replacements/${referenceId}/photos`).send(body);
 
 async function newReplacement(): Promise<string> {
-  const res = await confirm({ order_id: "ORD-104", action: "damage_replacement" });
+  const res = await confirm({ order_id: "ORD-104", phone_last4: "1187", action: "damage_replacement" });
   return res.body.data.referenceId as string;
 }
 
@@ -44,7 +44,7 @@ describe("POST /api/replacements/:referenceId/photos", () => {
   });
 
   it("returns 404 for a reference that is not a replacement", async () => {
-    const cancel = await confirm({ order_id: "ORD-103", action: "cancel" });
+    const cancel = await confirm({ order_id: "ORD-103", phone_last4: "9264", action: "cancel" });
     const res = await upload(cancel.body.data.referenceId, { mime_type: "image/jpeg", data: JPEG });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "Replacement request not found" });

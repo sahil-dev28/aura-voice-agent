@@ -23,7 +23,7 @@ function toDigit(word: string | undefined): string | undefined {
   return DIGIT_WORDS[word];
 }
 
-function wordsToDigits(words: string[]): string | null {
+export function wordsToDigits(words: string[]): string | null {
   let out = "";
   for (let i = 0; i < words.length; i++) {
     const word = words[i] as string;

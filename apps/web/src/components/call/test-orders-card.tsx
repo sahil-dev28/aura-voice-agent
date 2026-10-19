@@ -8,12 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aura
 import { getOrders } from "@/lib/api";
 import type { OrderView } from "@/lib/types";
 
-type OrderRow = Pick<OrderView, "orderId" | "customerName" | "product" | "valueInr" | "status"> & { note: string };
+type OrderRow = Pick<OrderView, "orderId" | "customerName" | "phoneLast4" | "product" | "valueInr" | "status"> & {
+  note: string;
+};
 
 const FALLBACK: OrderRow[] = [
   {
     orderId: "ORD-101",
     customerName: "Priya Sharma",
+    phoneLast4: "3721",
     product: "Vitamin C Serum (30ml)",
     valueInr: 699,
     status: "OUT_FOR_DELIVERY",
@@ -22,6 +25,7 @@ const FALLBACK: OrderRow[] = [
   {
     orderId: "ORD-102",
     customerName: "Rahul Verma",
+    phoneLast4: "5508",
     product: "Hydrating Sunscreen SPF 50",
     valueInr: 499,
     status: "DELIVERED",
@@ -30,6 +34,7 @@ const FALLBACK: OrderRow[] = [
   {
     orderId: "ORD-103",
     customerName: "Ananya Patel",
+    phoneLast4: "9264",
     product: "Green Tea Face Wash + Toner",
     valueInr: 850,
     status: "PROCESSING",
@@ -38,6 +43,7 @@ const FALLBACK: OrderRow[] = [
   {
     orderId: "ORD-104",
     customerName: "Karan Mehta",
+    phoneLast4: "1187",
     product: "Niacinamide 10% Serum",
     valueInr: 549,
     status: "DELIVERED",
@@ -87,7 +93,10 @@ export function TestOrdersCard() {
     <Card>
       <CardHeader>
         <CardTitle>Test orders</CardTitle>
-        <CardDescription>Mention any of these order IDs during the call.</CardDescription>
+        <CardDescription>
+          Mention any of these order IDs during the call. Aria will ask for the last four digits of the phone number
+          to verify you.
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <ul className="flex flex-col gap-3">
@@ -101,7 +110,7 @@ export function TestOrdersCard() {
                 {order.product} · ₹{order.valueInr}
               </p>
               <p className="text-muted-foreground">
-                {order.customerName} · {order.note}
+                {order.customerName} · phone ending {order.phoneLast4} · {order.note}
               </p>
             </li>
           ))}

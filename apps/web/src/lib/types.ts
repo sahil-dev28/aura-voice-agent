@@ -3,6 +3,7 @@ export type OrderStatus = "PROCESSING" | "SHIPPED" | "OUT_FOR_DELIVERY" | "DELIV
 export type OrderView = {
   orderId: string;
   customerName: string;
+  phoneLast4: string;
   product: string;
   valueInr: number;
   status: OrderStatus;

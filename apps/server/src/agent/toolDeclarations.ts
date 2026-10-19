@@ -18,6 +18,10 @@ export const toolDeclarations: FunctionDeclaration[] = [
           type: Type.STRING,
           description: "The order ID exactly as the customer said it, for example ORD-101 or 101.",
         },
+        phone_last4: {
+          type: Type.STRING,
+          description: "The last four digits of the phone number on the order, as the customer said them.",
+        },
       },
       required: ["order_id"],
     },
@@ -31,6 +35,10 @@ export const toolDeclarations: FunctionDeclaration[] = [
       type: Type.OBJECT,
       properties: {
         order_id: { type: Type.STRING, description: "The order ID, for example ORD-102." },
+        phone_last4: {
+          type: Type.STRING,
+          description: "The last four digits of the phone number on the order, as the customer said them.",
+        },
         action: { type: Type.STRING, enum: [...orderActions], description: "What the customer wants to do." },
         product_opened: {
           type: Type.BOOLEAN,
@@ -49,6 +57,10 @@ export const toolDeclarations: FunctionDeclaration[] = [
       type: Type.OBJECT,
       properties: {
         order_id: { type: Type.STRING, description: "The order ID, for example ORD-103." },
+        phone_last4: {
+          type: Type.STRING,
+          description: "The last four digits of the phone number on the order, as the customer said them.",
+        },
         action: { type: Type.STRING, enum: [...orderActions], description: "The action the customer confirmed." },
         product_opened: {
           type: Type.BOOLEAN,

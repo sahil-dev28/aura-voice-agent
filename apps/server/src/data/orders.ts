@@ -4,6 +4,7 @@ export type OrderStatus = (typeof orderStatuses)[number];
 export type Order = {
   orderId: string;
   customerName: string;
+  phone: string;
   product: string;
   valueInr: number;
   status: OrderStatus;
@@ -31,6 +32,7 @@ export function listOrders(now: Date = new Date()): Order[] {
     {
       orderId: "ORD-101",
       customerName: "Priya Sharma",
+      phone: "+91 98201 43721",
       product: "Vitamin C Serum (30ml)",
       valueInr: 699,
       status: "OUT_FOR_DELIVERY",
@@ -42,6 +44,7 @@ export function listOrders(now: Date = new Date()): Order[] {
     {
       orderId: "ORD-102",
       customerName: "Rahul Verma",
+      phone: "+91 99307 15508",
       product: "Hydrating Sunscreen SPF 50",
       valueInr: 499,
       status: "DELIVERED",
@@ -53,6 +56,7 @@ export function listOrders(now: Date = new Date()): Order[] {
     {
       orderId: "ORD-103",
       customerName: "Ananya Patel",
+      phone: "+91 98110 69264",
       product: "Green Tea Face Wash + Toner",
       valueInr: 850,
       status: "PROCESSING",
@@ -62,6 +66,7 @@ export function listOrders(now: Date = new Date()): Order[] {
     {
       orderId: "ORD-104",
       customerName: "Karan Mehta",
+      phone: "+91 97692 01187",
       product: "Niacinamide 10% Serum",
       valueInr: 549,
       status: "DELIVERED",

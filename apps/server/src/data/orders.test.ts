@@ -46,6 +46,10 @@ describe("orders", () => {
     expect(order?.valueInr).toBe(850);
   });
 
+  it("gives every order a phone number for verification", () => {
+    expect(listOrders(now).map((o) => o.phone.slice(-4))).toEqual(["3721", "5508", "9264", "1187"]);
+  });
+
   it("returns undefined for unknown ids", () => {
     expect(getOrder("ORD-109", now)).toBeUndefined();
   });
