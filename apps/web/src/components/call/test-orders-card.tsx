@@ -89,7 +89,7 @@ export function TestOrdersCard() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ul className="flex flex-col gap-3">
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {orders.map((order) => (
             <li key={order.orderId} className="rounded-lg border p-3 text-sm">
               <div className="flex items-center justify-between gap-2">
