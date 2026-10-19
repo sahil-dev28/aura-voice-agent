@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeToolEvent, filterCancelled } from "@/lib/live/toolEvents";
+import { describeToolEvent, filterCancelled, findEscalation } from "@/lib/live/toolEvents";
 
 describe("describeToolEvent", () => {
   it("describes a found order", () => {
@@ -49,10 +49,36 @@ describe("describeToolEvent", () => {
     ).toBe("Could not record cancel for ORD-101: not eligible (NOT_CANCELLABLE_IN_TRANSIT)");
   });
 
+  it("describes an escalation", () => {
+    expect(
+      describeToolEvent(
+        "escalate_to_human",
+        { reason: "policy_dispute", note: "x" },
+        { escalated: true, ticketId: "ESC-4F2A", reason: "policy_dispute", orderId: "ORD-102" },
+      ),
+    ).toBe("Escalated to human: ESC-4F2A (policy dispute)");
+  });
+
   it("describes failures", () => {
     expect(describeToolEvent("get_order_details", { order_id: "ORD-101" }, { error: "LOOKUP_UNAVAILABLE" })).toBe(
       "get_order_details failed: LOOKUP_UNAVAILABLE",
     );
+  });
+});
+
+describe("findEscalation", () => {
+  it("returns the first successful escalation result", () => {
+    const ticket = { escalated: true, ticketId: "ESC-4F2A" };
+    const events = [
+      { name: "get_order_details", result: { found: true } },
+      { name: "escalate_to_human", result: { error: "LOOKUP_UNAVAILABLE" } },
+      { name: "escalate_to_human", result: ticket },
+    ];
+    expect(findEscalation(events)).toBe(ticket);
+  });
+
+  it("returns undefined when nothing was escalated", () => {
+    expect(findEscalation([{ name: "get_order_details", result: { found: true } }])).toBeUndefined();
   });
 });
 

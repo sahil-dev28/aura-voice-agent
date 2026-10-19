@@ -48,13 +48,14 @@ End Call ── POST /api/summary ───────────► Gemini Fl
 
 ## How Aria decides to use a tool
 
-Three tools are declared with descriptions that say exactly when to call them:
+Four tools are declared with descriptions that say exactly when to call them:
 
 - `get_order_details(order_id)`: any question about a specific order.
 - `check_order_action(order_id, action, product_opened?)`: before saying whether a cancellation, return or damaged-product replacement is possible. It only checks and never records anything, so "can I cancel?" is just a question.
 - `confirm_order_action(order_id, action, product_opened?)`: only after the check was eligible and the customer clearly said yes. The server runs the policy again, records the request and returns a reference ID. Confirming the same order and action twice returns the same reference ID.
+- `escalate_to_human(reason, order_id?, note)`: straight away when the customer asks for a person. Aria offers it, and calls it only if the customer agrees, after a policy refusal is disputed twice, after two failed attempts to understand the customer, or when the request is about Aura but no tool covers it. It opens an `ESC-XXXX` callback ticket and returns the callback promise, so Aria doesn't make up a timeline. A second escalation in the same call reuses the first ticket. Escalating never changes a policy decision.
 
-All three are declared as blocking, so Aria waits for the real result instead of talking over it. The system prompt adds hard rules: never state order facts without a lookup in this call, never promise an action without an eligible result, and ask for the ID if it's missing. Spoken IDs like "order one oh one" or "one hundred and three" are normalised on the server. Unknown IDs come back as a normal `found: false` result, so Aria reads the ID back and asks the customer to verify it instead of guessing.
+All four are declared as blocking, so Aria waits for the real result instead of talking over it. The system prompt adds hard rules: never state order facts without a lookup in this call, never promise an action without an eligible result, and ask for the ID if it's missing. Spoken IDs like "order one oh one" or "one hundred and three" are normalised on the server. Unknown IDs come back as a normal `found: false` result, so Aria reads the ID back and asks the customer to verify it instead of guessing.
 
 ## Guardrails
 
@@ -150,7 +151,7 @@ The other hard part was the call lifecycle. Audio, the WebSocket, tool calls and
 After that, in order:
 1. **Customer verification** (phone or email match) before sharing order details.
 2. **Latency and error telemetry**: time to first audio, tool round-trip, interruptions and disconnects per call, so tuning is based on numbers.
-3. **Human handoff**: a tool that escalates to a person with the summary attached when Aria can't help or the customer asks.
+3. **Real human handoff**: `escalate_to_human` opens a callback ticket today. Next, send that ticket and the call summary to a real support queue, and offer a live transfer when a specialist is free.
 
 ### 4. At 1,000 conversations a day, what changes?
 

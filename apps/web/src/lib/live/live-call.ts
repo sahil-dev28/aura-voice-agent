@@ -10,7 +10,7 @@ import { ApiError, callTool, getToken } from "@/lib/api";
 import { type AudioPlayer, createAudioPlayer } from "@/lib/audio/audio-player";
 import { type MicRecorder, startMicRecorder } from "@/lib/audio/mic-recorder";
 import type { SessionEvent } from "@/lib/live/sessionReducer";
-import { describeToolEvent, filterCancelled } from "@/lib/live/toolEvents";
+import { describeToolEvent, filterCancelled, findEscalation } from "@/lib/live/toolEvents";
 import { addToolEntry, appendTranscript } from "@/lib/live/transcript";
 import type { ToolEvent, TranscriptEntry } from "@/lib/types";
 
@@ -84,9 +84,11 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       calls.map(async (call) => {
         const name = call.name ?? "";
         const args = (call.args ?? {}) as Record<string, unknown>;
+        // One ticket per call: a repeat escalation gets the ticket already opened.
+        const existing = name === "escalate_to_human" ? findEscalation(toolEvents) : undefined;
         let result: Record<string, unknown>;
         try {
-          result = (await callTool(name, args, AbortSignal.timeout(TOOL_TIMEOUT_MS))) as Record<string, unknown>;
+          result = (existing ?? (await callTool(name, args, AbortSignal.timeout(TOOL_TIMEOUT_MS)))) as Record<string, unknown>;
         } catch (error) {
           result = { error: error instanceof ApiError && error.status < 500 ? error.message : "LOOKUP_UNAVAILABLE" };
         }

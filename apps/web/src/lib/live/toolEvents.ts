@@ -5,6 +5,9 @@ type ActionResult = LookupResult & {
   reasonCode?: string;
   confirmed?: boolean;
   referenceId?: string;
+  escalated?: boolean;
+  ticketId?: string;
+  reason?: string;
 };
 
 const humanStatus = (status = "") => status.toLowerCase().replaceAll("_", " ");
@@ -23,7 +26,12 @@ export function describeToolEvent(name: string, args: Record<string, unknown>, r
       ? `Recorded ${String(args.action)} for ${r.orderId}: ref ${r.referenceId}`
       : `Could not record ${String(args.action)} for ${r.orderId}: not eligible (${r.reasonCode})`;
   }
+  if (name === "escalate_to_human") return `Escalated to human: ${r.ticketId} (${humanStatus(r.reason)})`;
   return `Called ${name}`;
+}
+
+export function findEscalation(events: { name: string; result: unknown }[]): unknown {
+  return events.find((event) => event.name === "escalate_to_human" && (event.result as ActionResult)?.escalated)?.result;
 }
 
 export function filterCancelled<T extends { id?: string }>(responses: T[], cancelled: ReadonlySet<string>): T[] {

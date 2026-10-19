@@ -43,6 +43,7 @@ describe("POST /api/summary", () => {
     expect(args.config.responseMimeType).toBe("application/json");
     expect(args.config.responseJsonSchema).toBeTruthy();
     expect(args.contents).toContain("Customer: Where is my order ORD-101?");
+    expect(args.contents).toContain("escalate_to_human");
   });
 
   it("500s when the model returns invalid JSON shape", async () => {

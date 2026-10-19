@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   connect: vi.fn(),
   createAudioPlayer: vi.fn(),
   startMicRecorder: vi.fn(),
+  callTool: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -17,7 +18,7 @@ vi.mock("@/lib/api", () => ({
     }
   },
   getToken: mocks.getToken,
-  callTool: vi.fn(),
+  callTool: mocks.callTool,
 }));
 vi.mock("@/lib/audio/audio-player", () => ({ createAudioPlayer: mocks.createAudioPlayer }));
 vi.mock("@/lib/audio/mic-recorder", () => ({ startMicRecorder: mocks.startMicRecorder }));
@@ -116,6 +117,30 @@ describe("goAway", () => {
     expect(h.onEvent).not.toHaveBeenCalledWith({ type: "END" });
     vi.advanceTimersByTime(5000);
     expect(h.onEvent).toHaveBeenCalledWith({ type: "END" });
+  });
+});
+
+describe("escalate_to_human", () => {
+  it("reuses the first ticket for the rest of the call", async () => {
+    mocks.getToken.mockResolvedValue({ token: "t", model: "m" });
+    const session = fakeSession();
+    mocks.connect.mockResolvedValueOnce(session);
+    mocks.callTool.mockResolvedValueOnce({ escalated: true, ticketId: "ESC-4F2A" });
+    const call = createLiveCall(handlers());
+    await call.start();
+    const { onmessage } = mocks.connect.mock.calls[0]?.[0].callbacks as Callbacks;
+    const escalation = (id: string) => ({
+      toolCall: { functionCalls: [{ id, name: "escalate_to_human", args: { reason: "customer_request", note: "x" } }] },
+    });
+
+    onmessage(escalation("a"));
+    await flush();
+    onmessage(escalation("b"));
+    await flush();
+
+    expect(mocks.callTool).toHaveBeenCalledTimes(1);
+    const second = session.sendToolResponse.mock.calls[1]?.[0].functionResponses[0];
+    expect(second).toMatchObject({ id: "b", response: { output: { ticketId: "ESC-4F2A" } } });
   });
 });
 

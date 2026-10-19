@@ -12,5 +12,16 @@ export const checkOrderActionSchema = getOrderDetailsSchema.extend({
   product_opened: z.boolean().optional(),
 });
 
+export const escalationReasons = ["customer_request", "policy_dispute", "unclear_audio", "unsupported_request"] as const;
+
+export const escalateToHumanSchema = z.object({
+  reason: z.enum(escalationReasons, {
+    error: "reason must be customer_request, policy_dispute, unclear_audio or unsupported_request",
+  }),
+  order_id: z.string().trim().max(40).optional(),
+  note: z.string({ error: "note is required" }).trim().min(1, { error: "note is required" }).max(500),
+});
+
 export type GetOrderDetailsInput = z.infer<typeof getOrderDetailsSchema>;
 export type CheckOrderActionInput = z.infer<typeof checkOrderActionSchema>;
+export type EscalateToHumanInput = z.infer<typeof escalateToHumanSchema>;

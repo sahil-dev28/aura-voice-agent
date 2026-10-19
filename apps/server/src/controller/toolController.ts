@@ -1,8 +1,8 @@
 import type { Request, Response } from "express";
 
 import { type Order, getOrder, listOrders } from "@/data/orders";
-import { recordRequest } from "@/data/requests";
-import type { CheckOrderActionInput, GetOrderDetailsInput, OrderAction } from "@/schema/tool";
+import { openTicket, recordRequest } from "@/data/requests";
+import type { CheckOrderActionInput, EscalateToHumanInput, GetOrderDetailsInput, OrderAction } from "@/schema/tool";
 import { formatUnknownError } from "@/utils/formatUnknownError";
 import { normalizeOrderId } from "@/utils/orderId";
 import {
@@ -110,6 +110,25 @@ export const confirmOrderAction = async (req: Request, res: Response): Promise<v
     const referenceId = recordRequest(order.orderId, input.action);
     res.status(200).json({
       data: { ...base, ...decision, nextStep: RECORDED_NEXT_STEP[input.action], confirmed: true, referenceId },
+    });
+    return;
+  } catch (error) {
+    res.status(500).json(formatUnknownError(error));
+  }
+};
+
+export const escalateToHuman = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const input = req.body as EscalateToHumanInput;
+    const normalized = input.order_id ? normalizeOrderId(input.order_id) : undefined;
+    res.status(200).json({
+      data: {
+        escalated: true,
+        ticketId: openTicket(),
+        reason: input.reason,
+        orderId: normalized?.ok ? normalized.orderId : null,
+        nextStep: "A support specialist will contact the customer within one business day.",
+      },
     });
     return;
   } catch (error) {

@@ -1,8 +1,8 @@
 import { Behavior, type FunctionDeclaration, Type } from "@google/genai";
 
-import { orderActions } from "@/schema/tool";
+import { escalationReasons, orderActions } from "@/schema/tool";
 
-export const toolNames = ["get_order_details", "check_order_action", "confirm_order_action"] as const;
+export const toolNames = ["get_order_details", "check_order_action", "confirm_order_action", "escalate_to_human"] as const;
 export type ToolName = (typeof toolNames)[number];
 
 export const toolDeclarations: FunctionDeclaration[] = [
@@ -56,6 +56,24 @@ export const toolDeclarations: FunctionDeclaration[] = [
         },
       },
       required: ["order_id", "action"],
+    },
+  },
+  {
+    name: "escalate_to_human",
+    behavior: Behavior.BLOCKING,
+    description:
+      "Hand the customer over to a human support specialist by opening a callback ticket. Call this straight away when the customer asks for a person, or after the customer agrees to it when you offer it.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        reason: { type: Type.STRING, enum: [...escalationReasons], description: "Why the customer needs a human." },
+        order_id: { type: Type.STRING, description: "The order this is about, if the customer gave one." },
+        note: {
+          type: Type.STRING,
+          description: "One or two sentences for the specialist: what the customer wants and what you already told them.",
+        },
+      },
+      required: ["reason", "note"],
     },
   },
 ];

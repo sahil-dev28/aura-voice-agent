@@ -15,10 +15,10 @@ function buildSummaryPrompt({ transcript, toolEvents }: SummaryRequestInput): st
 Field rules:
 - customer_intent: the main reason for the call.
 - order_id: the main order discussed in ORD-### form, or null if none was confirmed by a tool.
-- resolution_status: RESOLVED if the question was answered or the request was handled; POLICY_DECLINED if the main request was refused under policy and the customer was told why; UNRESOLVED if the call ended before an answer; ESCALATION_NEEDED if a human must follow up (for example the customer disputes a refusal, or a replacement needs photo review).
+- resolution_status: RESOLVED if the question was answered or the request was handled; POLICY_DECLINED if the main request was refused under policy and the customer was told why; UNRESOLVED if the call ended before an answer; ESCALATION_NEEDED if a human must follow up (for example escalate_to_human opened a ticket, the customer disputes a refusal, or a replacement needs photo review).
 - sentiment: the customer's overall tone.
 - policy_flags: reason codes from tool results that matter (for example RETURN_WINDOW_EXPIRED, NOT_CANCELLABLE_IN_TRANSIT), plus OUT_OF_SCOPE_REQUEST if the customer asked for something unrelated to Aura.
-- call_summary: one to three sentences in English, past tense, including any reference IDs.
+- call_summary: one to three sentences in English, past tense, including any reference or ticket IDs.
 - follow_up_required: true if someone at Aura must act after the call (a recorded cancellation, return or replacement, or an escalation).
 
 Transcript:

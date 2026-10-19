@@ -6,6 +6,7 @@ import { app } from "@/app";
 const lookup = (body: object) => request(app).post("/api/tools/get_order_details").send(body);
 const action = (body: object) => request(app).post("/api/tools/check_order_action").send(body);
 const confirm = (body: object) => request(app).post("/api/tools/confirm_order_action").send(body);
+const escalate = (body: object) => request(app).post("/api/tools/escalate_to_human").send(body);
 
 describe("GET /api/orders", () => {
   it("lists the three orders with derived fields", async () => {
@@ -125,6 +126,38 @@ describe("POST /api/tools/confirm_order_action", () => {
     const res = await confirm({ order_id: "ORD-103", action: "refund" });
     expect(res.status).toBe(400);
     expect(res.body.fieldErrors).toHaveProperty("action");
+  });
+});
+
+describe("POST /api/tools/escalate_to_human", () => {
+  it("opens an ESC ticket with a callback promise", async () => {
+    const res = await escalate({ reason: "policy_dispute", order_id: "order one zero two", note: "Wants a return after 14 days." });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ escalated: true, reason: "policy_dispute", orderId: "ORD-102" });
+    expect(res.body.data.ticketId).toMatch(/^ESC-[0-9A-F]{4}$/);
+    expect(res.body.data.nextStep).toMatch(/within one business day/);
+  });
+
+  it("escalates without an order", async () => {
+    const res = await escalate({ reason: "customer_request", note: "Asked for a person." });
+    expect(res.body.data).toMatchObject({ escalated: true, orderId: null });
+  });
+
+  it("still escalates when the order id is not recognised", async () => {
+    const res = await escalate({ reason: "unclear_audio", order_id: "banana", note: "Could not hear the order id." });
+    expect(res.body.data).toMatchObject({ escalated: true, orderId: null });
+  });
+
+  it("rejects an unknown reason with 400", async () => {
+    const res = await escalate({ reason: "bored", note: "x" });
+    expect(res.status).toBe(400);
+    expect(res.body.fieldErrors).toHaveProperty("reason");
+  });
+
+  it("rejects a missing note with 400", async () => {
+    const res = await escalate({ reason: "customer_request" });
+    expect(res.status).toBe(400);
+    expect(res.body.fieldErrors).toHaveProperty("note");
   });
 });
 
