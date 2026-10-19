@@ -28,6 +28,13 @@ export function pcm16ToFloat(input: Int16Array): Float32Array {
   return out;
 }
 
+export function rms(input: Float32Array): number {
+  if (input.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < input.length; i++) sum += (input[i] as number) ** 2;
+  return Math.sqrt(sum / input.length);
+}
+
 export function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   const chunk = 0x8000;

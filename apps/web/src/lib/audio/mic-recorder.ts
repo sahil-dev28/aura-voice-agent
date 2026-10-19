@@ -1,4 +1,4 @@
-import { bytesToBase64, downsample, floatToPcm16 } from "@/lib/audio/pcm";
+import { bytesToBase64, downsample, floatToPcm16, rms } from "@/lib/audio/pcm";
 
 export type MicRecorder = { stop: () => void };
 
@@ -14,7 +14,7 @@ function concat(parts: Float32Array[], length: number): Float32Array {
   return out;
 }
 
-export async function startMicRecorder(onChunk: (base64Pcm16k: string) => void): Promise<MicRecorder> {
+export async function startMicRecorder(onChunk: (base64Pcm16k: string, level: number) => void): Promise<MicRecorder> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
   });
@@ -34,7 +34,7 @@ export async function startMicRecorder(onChunk: (base64Pcm16k: string) => void):
     pending = [];
     pendingLength = 0;
     const pcm = floatToPcm16(downsample(merged, ctx.sampleRate));
-    onChunk(bytesToBase64(new Uint8Array(pcm.buffer)));
+    onChunk(bytesToBase64(new Uint8Array(pcm.buffer)), rms(merged));
   };
 
   source.connect(node);

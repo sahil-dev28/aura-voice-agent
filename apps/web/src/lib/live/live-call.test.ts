@@ -187,6 +187,32 @@ describe("silence", () => {
     expect(h.onEvent).toHaveBeenCalledWith({ type: "END" });
   });
 
+  it("waits while the mic hears the customer, before any transcript arrives", async () => {
+    const { session, onmessage } = await startLiveCall();
+    vi.useFakeTimers();
+    const sendAudio = mocks.startMicRecorder.mock.calls[0]?.[0] as (data: string, level: number) => void;
+    onmessage(agentDone);
+
+    vi.advanceTimersByTime(8_000);
+    sendAudio("pcm", 0.001);
+    vi.advanceTimersByTime(2_000);
+    expect(sentTexts(session)[1]).toMatch(/still there/);
+  });
+
+  it("restarts the silence timer when the mic hears speech", async () => {
+    const { session, onmessage } = await startLiveCall();
+    vi.useFakeTimers();
+    const sendAudio = mocks.startMicRecorder.mock.calls[0]?.[0] as (data: string, level: number) => void;
+    onmessage(agentDone);
+
+    vi.advanceTimersByTime(8_000);
+    sendAudio("pcm", 0.1);
+    vi.advanceTimersByTime(9_999);
+    expect(sentTexts(session)).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(sentTexts(session)[1]).toMatch(/still there/);
+  });
+
   it("starts over when the customer speaks", async () => {
     const { session, onmessage } = await startLiveCall();
     vi.useFakeTimers();
@@ -248,6 +274,18 @@ describe("session resumption", () => {
 
     expect(mocks.connect).toHaveBeenCalledTimes(2);
     expect(h.onEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: "ERROR" }));
+  });
+
+  it("stops sending audio to a dropped session while reconnecting", async () => {
+    const { session, onmessage, onclose } = await startLiveCall();
+    mocks.connect.mockResolvedValueOnce(fakeSession());
+    onmessage({ sessionResumptionUpdate: { newHandle: "h1", resumable: true } });
+    const sendAudio = mocks.startMicRecorder.mock.calls[0]?.[0] as (data: string) => void;
+
+    onclose({ reason: "network" });
+    sendAudio("pcm");
+
+    expect(session.sendRealtimeInput).not.toHaveBeenCalled();
   });
 
   it("fails when the session drops before any handle arrived", async () => {

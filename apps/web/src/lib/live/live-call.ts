@@ -25,6 +25,7 @@ const USER_PAUSE_MS = 700;
 const TOOL_TIMEOUT_MS = 5000;
 const GREETING_TRIGGER = "The customer has just joined the call. Greet them now.";
 const SILENCE_MS = 10_000;
+const SPEECH_LEVEL = 0.02;
 const GOODBYE_GRACE_MS = 10_000;
 const CALL_LIMIT_MS = 10 * 60_000;
 const WRAP_UP_BEFORE_MS = 60_000;
@@ -123,6 +124,13 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     }
     if (callState.status !== "listening") return;
     if (closing) return end();
+    silenceTimer = setTimeout(onSilence, SILENCE_MS);
+  };
+
+  // The transcript arrives late, so mic loudness is what tells us the customer is talking.
+  const heardCustomer = () => {
+    if (!active || callState.status !== "listening" || closing) return;
+    clearTimeout(silenceTimer);
     silenceTimer = setTimeout(onSilence, SILENCE_MS);
   };
 
@@ -227,8 +235,10 @@ export function createLiveCall(handlers: LiveCallHandlers) {
 
   function dropped(message: string) {
     if (resuming) return;
-    if (resumeHandle && resumes < MAX_RESUMES) void resume(runId);
-    else fail(message);
+    if (!resumeHandle || resumes >= MAX_RESUMES) return fail(message);
+    // The socket is gone, so stop sending to it until the resumed session takes over.
+    session = null;
+    void resume(runId);
   }
 
   async function resume(run: number) {
@@ -268,8 +278,10 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       });
       if (stale()) return runPlayer.close();
       player = runPlayer;
-      const runMic = await startMicRecorder((data) => {
-        if (run === runId) session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } });
+      const runMic = await startMicRecorder((data, level) => {
+        if (run !== runId) return;
+        if (level >= SPEECH_LEVEL) heardCustomer();
+        session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } });
       });
       if (stale()) return runMic.stop();
       mic = runMic;

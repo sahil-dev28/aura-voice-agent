@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { base64ToBytes, bytesToBase64, downsample, floatToPcm16, pcm16ToFloat } from "@/lib/audio/pcm";
+import { base64ToBytes, bytesToBase64, downsample, floatToPcm16, pcm16ToFloat, rms } from "@/lib/audio/pcm";
 
 describe("downsample", () => {
   it("48k -> 16k divides length by 3 and averages", () => {
@@ -45,5 +45,16 @@ describe("base64", () => {
   it("encodes large buffers without stack overflow", () => {
     const bytes = new Uint8Array(200_000).fill(7);
     expect(base64ToBytes(bytesToBase64(bytes))).toHaveLength(200_000);
+  });
+});
+
+describe("rms", () => {
+  it("measures loudness", () => {
+    expect(rms(new Float32Array([0.5, -0.5, 0.5, -0.5]))).toBeCloseTo(0.5);
+  });
+
+  it("is 0 for silence and empty input", () => {
+    expect(rms(new Float32Array(4))).toBe(0);
+    expect(rms(new Float32Array(0))).toBe(0);
   });
 });
