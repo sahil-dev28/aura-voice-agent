@@ -61,6 +61,36 @@ describe("POST /api/summary", () => {
     expect(res.status).toBe(500);
   });
 
+  it("retries once when the upstream call fails", async () => {
+    generateContent
+      .mockImplementationOnce(async () => {
+        throw new Error("503 model overloaded");
+      })
+      .mockResolvedValueOnce({ text: JSON.stringify(outcome) });
+    const res = await request(app).post("/api/summary").send(body);
+    expect(res.status).toBe(200);
+    expect(generateContent).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries once when the model output does not match the schema", async () => {
+    generateContent
+      .mockResolvedValueOnce({ text: JSON.stringify({ customer_intent: "FLIGHTS" }) })
+      .mockResolvedValueOnce({ text: JSON.stringify(outcome) });
+    const res = await request(app).post("/api/summary").send(body);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual(outcome);
+  });
+
+  it("gives up after two failed attempts", async () => {
+    generateContent.mockImplementation(async () => {
+      throw new Error("quota");
+    });
+    const res = await request(app).post("/api/summary").send(body);
+    expect(res.status).toBe(500);
+    expect(generateContent).toHaveBeenCalledTimes(2);
+    generateContent.mockReset();
+  });
+
   it("400s when the transcript is over the character cap", async () => {
     const long = Array.from({ length: 20 }, (_, i) => ({ role: "customer", text: "x".repeat(4000), ts: i }));
     const res = await request(app).post("/api/summary").send({ transcript: long, toolEvents: [] });

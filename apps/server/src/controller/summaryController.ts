@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { env } from "@aura/env/server";
 
-import { type SummaryRequestInput, callOutcomeSchema } from "@/schema/summary";
+import { type CallOutcome, type SummaryRequestInput, callOutcomeSchema } from "@/schema/summary";
 import { getGenAI } from "@/utils/gemini";
 
 const ROLE_LABEL = { customer: "Customer", agent: "Aria", tool: "Tool" } as const;
@@ -28,25 +28,35 @@ Tool results:
 ${JSON.stringify(toolEvents)}`;
 }
 
-export const createSummary = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const input = req.body as SummaryRequestInput;
-    const response = await getGenAI().models.generateContent({
-      model: env.GEMINI_SUMMARY_MODEL,
-      contents: buildSummaryPrompt(input),
-      config: {
-        responseMimeType: "application/json",
-        responseJsonSchema: z.toJSONSchema(callOutcomeSchema),
-        temperature: 0.2,
-      },
-    });
-    const parsed = callOutcomeSchema.safeParse(JSON.parse(response.text ?? ""));
-    if (!parsed.success) throw new Error(`Summary failed validation: ${parsed.error.message}`);
+const ATTEMPTS = 2;
+const RETRY_DELAY_MS = 300;
 
-    res.status(200).json({ data: parsed.data });
-    return;
-  } catch (error) {
-    console.error("Summary failed:", error);
-    res.status(500).json({ error: "Could not generate summary" });
+async function generateOutcome(input: SummaryRequestInput): Promise<CallOutcome> {
+  const response = await getGenAI().models.generateContent({
+    model: env.GEMINI_SUMMARY_MODEL,
+    contents: buildSummaryPrompt(input),
+    config: {
+      responseMimeType: "application/json",
+      responseJsonSchema: z.toJSONSchema(callOutcomeSchema),
+      temperature: 0.2,
+    },
+  });
+  const parsed = callOutcomeSchema.safeParse(JSON.parse(response.text ?? ""));
+  if (!parsed.success) throw new Error(`Summary failed validation: ${parsed.error.message}`);
+  return parsed.data;
+}
+
+export const createSummary = async (req: Request, res: Response): Promise<void> => {
+  const input = req.body as SummaryRequestInput;
+  // The preview model is sometimes overloaded or returns an off-schema answer, and a second try usually works.
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    try {
+      res.status(200).json({ data: await generateOutcome(input) });
+      return;
+    } catch (error) {
+      console.error(`Summary attempt ${attempt} of ${ATTEMPTS} failed:`, error);
+      if (attempt < ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
   }
+  res.status(500).json({ error: "Could not generate summary" });
 };
