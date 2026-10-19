@@ -28,12 +28,16 @@ Tool results:
 ${JSON.stringify(toolEvents)}`;
 }
 
-const ATTEMPTS = 2;
+const ATTEMPTS_PER_MODEL = 2;
 const RETRY_DELAY_MS = 300;
 
-async function generateOutcome(input: SummaryRequestInput): Promise<CallOutcome> {
+// Free-tier keys have a small daily quota per model, so a used-up model is skipped rather than retried.
+const isQuotaError = (error: unknown) =>
+  (error as { status?: number })?.status === 429 || /RESOURCE_EXHAUSTED/.test(String(error));
+
+async function generateOutcome(input: SummaryRequestInput, model: string): Promise<CallOutcome> {
   const response = await getGenAI().models.generateContent({
-    model: env.GEMINI_SUMMARY_MODEL,
+    model,
     contents: buildSummaryPrompt(input),
     config: {
       responseMimeType: "application/json",
@@ -48,15 +52,25 @@ async function generateOutcome(input: SummaryRequestInput): Promise<CallOutcome>
 
 export const createSummary = async (req: Request, res: Response): Promise<void> => {
   const input = req.body as SummaryRequestInput;
-  // The preview model is sometimes overloaded or returns an off-schema answer, and a second try usually works.
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    try {
-      res.status(200).json({ data: await generateOutcome(input) });
-      return;
-    } catch (error) {
-      console.error(`Summary attempt ${attempt} of ${ATTEMPTS} failed:`, error);
-      if (attempt < ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  const models = [...new Set([env.GEMINI_SUMMARY_MODEL, env.GEMINI_SUMMARY_FALLBACK_MODEL])];
+  let quotaOnly = true;
+  // An overloaded model or an off-schema answer usually works on a second try; a used-up quota never does.
+  for (const model of models) {
+    for (let attempt = 1; attempt <= ATTEMPTS_PER_MODEL; attempt++) {
+      try {
+        res.status(200).json({ data: await generateOutcome(input, model) });
+        return;
+      } catch (error) {
+        console.error(`Summary with ${model}, attempt ${attempt}, failed:`, error);
+        if (isQuotaError(error)) break;
+        quotaOnly = false;
+        if (attempt < ATTEMPTS_PER_MODEL) await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      }
     }
+  }
+  if (quotaOnly) {
+    res.status(503).json({ error: "The summary quota for today is used up. Try again later." });
+    return;
   }
   res.status(500).json({ error: "Could not generate summary" });
 };

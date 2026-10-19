@@ -2,6 +2,10 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const generateContent = vi.fn();
+const quotaError = Object.assign(new Error("RESOURCE_EXHAUSTED: quota exceeded"), { status: 429 });
+
+vi.stubEnv("GEMINI_SUMMARY_MODEL", "main-model");
+vi.stubEnv("GEMINI_SUMMARY_FALLBACK_MODEL", "fallback-model");
 
 vi.mock("@/utils/gemini", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/utils/gemini")>();
@@ -81,12 +85,38 @@ describe("POST /api/summary", () => {
     expect(res.body.data).toEqual(outcome);
   });
 
-  it("gives up after two failed attempts", async () => {
+  it("gives up after two failed attempts on each model", async () => {
     generateContent.mockImplementation(async () => {
-      throw new Error("quota");
+      throw new Error("model overloaded");
     });
-    const res = await request(app).post("/api/summary").send(body);
+    const res = await request(app).post("/api/summary").set("X-Forwarded-For", "10.1.0.1").send(body);
     expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Could not generate summary" });
+    expect(generateContent).toHaveBeenCalledTimes(4);
+    generateContent.mockReset();
+  });
+
+  it("moves to the fallback model straight away when the main model is out of quota", async () => {
+    generateContent
+      .mockImplementationOnce(async () => {
+        throw quotaError;
+      })
+      .mockResolvedValueOnce({ text: JSON.stringify(outcome) });
+    const res = await request(app).post("/api/summary").set("X-Forwarded-For", "10.1.0.2").send(body);
+
+    expect(res.status).toBe(200);
+    const models = generateContent.mock.calls.map(([args]) => args.model);
+    expect(models).toEqual(["main-model", "fallback-model"]);
+  });
+
+  it("says the quota is used up when every model is out of quota", async () => {
+    generateContent.mockImplementation(async () => {
+      throw quotaError;
+    });
+    const res = await request(app).post("/api/summary").set("X-Forwarded-For", "10.1.0.3").send(body);
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/quota/i);
     expect(generateContent).toHaveBeenCalledTimes(2);
     generateContent.mockReset();
   });
