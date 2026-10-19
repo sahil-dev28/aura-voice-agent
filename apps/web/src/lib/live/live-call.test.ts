@@ -238,6 +238,55 @@ describe("transcript turns", () => {
   });
 });
 
+describe("mute", () => {
+  const audioCalls = (session: ReturnType<typeof fakeSession>) =>
+    session.sendRealtimeInput.mock.calls.filter(([input]) => "audio" in input).length;
+
+  it("stops sending audio and ends the audio stream once", async () => {
+    const { call, session } = await startLiveCall();
+    const sendAudio = mocks.startMicRecorder.mock.calls[0]?.[0] as (data: string, level: number) => void;
+
+    call.setMuted(true);
+    call.setMuted(true);
+    sendAudio("pcm", 0.1);
+
+    expect(session.sendRealtimeInput).toHaveBeenCalledTimes(1);
+    expect(session.sendRealtimeInput).toHaveBeenCalledWith({ audioStreamEnd: true });
+    expect(audioCalls(session)).toBe(0);
+
+    call.setMuted(false);
+    sendAudio("pcm", 0.1);
+    expect(audioCalls(session)).toBe(1);
+  });
+
+  it("pauses the silence check-in while muted", async () => {
+    const { call, session, onmessage } = await startLiveCall();
+    vi.useFakeTimers();
+    onmessage(agentDone);
+
+    call.setMuted(true);
+    vi.advanceTimersByTime(30_000);
+    expect(sentTexts(session)).toHaveLength(1);
+
+    call.setMuted(false);
+    vi.advanceTimersByTime(10_000);
+    expect(sentTexts(session)[1]).toMatch(/still there/);
+  });
+
+  it("starts the next call unmuted", async () => {
+    const { call } = await startLiveCall();
+    call.setMuted(true);
+    call.end();
+    const next = fakeSession();
+    mocks.connect.mockResolvedValueOnce(next);
+    await call.start();
+
+    const sendAudio = mocks.startMicRecorder.mock.calls[1]?.[0] as (data: string, level: number) => void;
+    sendAudio("pcm", 0.1);
+    expect(audioCalls(next)).toBe(1);
+  });
+});
+
 describe("call length limit", () => {
   it("asks Aria to wrap up a minute before the limit, then ends the call", async () => {
     vi.useFakeTimers();

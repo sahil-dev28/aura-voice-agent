@@ -32,6 +32,7 @@ export function useLiveSession() {
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [summary, setSummary] = useState<SummaryState>({ status: "idle" });
+  const [muted, setMuted] = useState(false);
   const lastCall = useRef<FinishedCall | null>(null);
 
   const [call] = useState(() =>
@@ -41,6 +42,7 @@ export function useLiveSession() {
       onToolEvents: setToolEvents,
       onFinished: (finished) => {
         lastCall.current = finished;
+        setMuted(false);
         void requestSummary(finished, setSummary);
       },
     }),
@@ -50,12 +52,18 @@ export function useLiveSession() {
 
   const start = useCallback(() => {
     setSummary({ status: "idle" });
+    setMuted(false);
     void call.start();
   }, [call]);
+
+  const toggleMute = useCallback(() => {
+    call.setMuted(!muted);
+    setMuted(!muted);
+  }, [call, muted]);
 
   const retrySummary = useCallback(() => {
     if (lastCall.current) void requestSummary(lastCall.current, setSummary);
   }, []);
 
-  return { state, transcript, toolEvents, summary, start, end: call.end, retrySummary };
+  return { state, transcript, toolEvents, summary, muted, start, end: call.end, toggleMute, retrySummary };
 }

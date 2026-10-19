@@ -68,6 +68,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
   let resumeHandle: string | undefined;
   let resuming = false;
   let resumes = 0;
+  let muted = false;
   let transcript: TranscriptEntry[] = [];
   let toolEvents: ToolEvent[] = [];
   const cancelled = new Set<string>();
@@ -122,7 +123,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       clearTimeout(goodbyeTimer);
       return;
     }
-    if (callState.status !== "listening") return;
+    if (muted || callState.status !== "listening") return;
     if (closing) return end();
     silenceTimer = setTimeout(onSilence, SILENCE_MS);
   };
@@ -132,6 +133,18 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     if (!active || callState.status !== "listening" || closing) return;
     clearTimeout(silenceTimer);
     silenceTimer = setTimeout(onSilence, SILENCE_MS);
+  };
+
+  // Muted: keep the mic open but send nothing, and don't treat the quiet as the customer leaving.
+  const setMuted = (next: boolean) => {
+    if (next === muted) return;
+    muted = next;
+    if (muted) {
+      clearTimeout(silenceTimer);
+      session?.sendRealtimeInput({ audioStreamEnd: true });
+    } else {
+      heardCustomer();
+    }
   };
 
   function emit(event: SessionEvent) {
@@ -269,6 +282,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     resumeHandle = undefined;
     resuming = false;
     resumes = 0;
+    muted = false;
     transcript = [];
     toolEvents = [];
     cancelled.clear();
@@ -283,7 +297,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       if (stale()) return runPlayer.close();
       player = runPlayer;
       const runMic = await startMicRecorder((data, level) => {
-        if (run !== runId) return;
+        if (run !== runId || muted) return;
         if (level >= SPEECH_LEVEL) heardCustomer();
         session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } });
       });
@@ -304,5 +318,5 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     teardown();
   };
 
-  return { start, end, dispose };
+  return { start, end, dispose, setMuted };
 }

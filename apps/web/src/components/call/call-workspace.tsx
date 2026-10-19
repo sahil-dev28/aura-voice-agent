@@ -13,7 +13,7 @@ import { TestOrdersCard } from "@/components/call/test-orders-card";
 import { useLiveSession } from "@/lib/live/use-live-session";
 
 export function CallWorkspace() {
-  const { state, transcript, summary, start, end, retrySummary } = useLiveSession();
+  const { state, transcript, summary, muted, start, end, toggleMute, retrySummary } = useLiveSession();
 
   useEffect(() => {
     if (state.error) toast.error(state.error);
@@ -31,7 +31,13 @@ export function CallWorkspace() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <CallControls status={state.status} onStart={start} onEnd={end} />
+              <CallControls
+                status={state.status}
+                muted={muted}
+                onStart={start}
+                onEnd={end}
+                onToggleMute={toggleMute}
+              />
               <div className="flex-1">
                 <StateIndicator status={state.status} />
               </div>
