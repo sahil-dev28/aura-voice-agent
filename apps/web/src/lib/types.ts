@@ -29,7 +29,7 @@ export type CallOutcome = {
 };
 
 export type TranscriptRole = "customer" | "agent" | "tool";
-export type TranscriptEntry = { id: string; role: TranscriptRole; text: string; ts: number };
+export type TranscriptEntry = { id: string; role: TranscriptRole; text: string; ts: number; closed?: boolean };
 
 export type ToolEvent = { id: string; name: string; args: Record<string, unknown>; result: unknown; ts: number };
 

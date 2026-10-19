@@ -11,7 +11,7 @@ import { type AudioPlayer, createAudioPlayer } from "@/lib/audio/audio-player";
 import { type MicRecorder, startMicRecorder } from "@/lib/audio/mic-recorder";
 import { type SessionEvent, initialSessionState, sessionReducer } from "@/lib/live/sessionReducer";
 import { describeToolEvent, filterCancelled, findEscalation } from "@/lib/live/toolEvents";
-import { addToolEntry, appendTranscript } from "@/lib/live/transcript";
+import { addToolEntry, appendTranscript, closeTurn } from "@/lib/live/transcript";
 import type { ToolEvent, TranscriptEntry } from "@/lib/types";
 
 export type LiveCallHandlers = {
@@ -170,6 +170,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     if (content) {
       if (content.interrupted) {
         player?.flush();
+        setTranscript(closeTurn(transcript));
         emit({ type: "INTERRUPTED" });
       }
       const userText = content.inputTranscription?.text;
@@ -188,7 +189,10 @@ export function createLiveCall(handlers: LiveCallHandlers) {
           emit({ type: "AUDIO_CHUNK" });
         }
       }
-      if (content.turnComplete) emit({ type: "TURN_COMPLETE" });
+      if (content.turnComplete) {
+        setTranscript(closeTurn(transcript));
+        emit({ type: "TURN_COMPLETE" });
+      }
     }
     for (const id of message.toolCallCancellation?.ids ?? []) cancelled.add(id);
     if (message.toolCall?.functionCalls?.length) void runTools(message.toolCall.functionCalls);

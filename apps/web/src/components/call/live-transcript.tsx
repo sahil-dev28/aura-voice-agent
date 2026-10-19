@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { ScrollArea } from "@aura/ui/components/scroll-area";
 import { cn } from "@aura/ui/lib/utils";
 
+import { formatSpokenIds } from "@/lib/live/transcript";
 import type { TranscriptEntry } from "@/lib/types";
 
 export function LiveTranscript({ entries }: { entries: TranscriptEntry[] }) {
@@ -39,7 +40,7 @@ export function LiveTranscript({ entries }: { entries: TranscriptEntry[] }) {
               <span className="mb-0.5 block font-medium text-xs opacity-70">
                 {entry.role === "customer" ? "You" : "Aria"}
               </span>
-              {entry.text.trim()}
+              {formatSpokenIds(entry.text.trim())}
             </div>
           ),
         )}

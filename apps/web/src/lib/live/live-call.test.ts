@@ -226,6 +226,18 @@ describe("silence", () => {
   });
 });
 
+describe("transcript turns", () => {
+  it("puts each Aria turn on its own line", async () => {
+    const { h, onmessage } = await startLiveCall();
+    onmessage({ serverContent: { outputTranscription: { text: "Your ticket is ready." } } });
+    onmessage(agentDone);
+    onmessage({ serverContent: { outputTranscription: { text: "Are you still there?" } } });
+
+    const last = h.onTranscript.mock.calls.at(-1)?.[0] as { text: string }[];
+    expect(last.map((e) => e.text)).toEqual(["Your ticket is ready.", "Are you still there?"]);
+  });
+});
+
 describe("call length limit", () => {
   it("asks Aria to wrap up a minute before the limit, then ends the call", async () => {
     vi.useFakeTimers();
