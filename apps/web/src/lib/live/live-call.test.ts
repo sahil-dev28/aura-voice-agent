@@ -144,6 +144,119 @@ describe("escalate_to_human", () => {
   });
 });
 
+async function startLiveCall() {
+  mocks.getToken.mockResolvedValue({ token: "t", model: "m" });
+  const session = fakeSession();
+  mocks.connect.mockResolvedValueOnce(session);
+  const h = handlers();
+  const call = createLiveCall(h);
+  await call.start();
+  const { onmessage, onclose } = mocks.connect.mock.calls[0]?.[0].callbacks as Callbacks;
+  return { h, call, session, onmessage, onclose };
+}
+
+const sentTexts = (session: ReturnType<typeof fakeSession>) =>
+  session.sendClientContent.mock.calls.map(([content]) => String(content.turns[0].parts[0].text));
+
+const agentDone = { serverContent: { turnComplete: true } };
+const customerSpeech = { serverContent: { inputTranscription: { text: "hello" } } };
+
+describe("silence", () => {
+  it("asks if the customer is still there after 10 seconds of silence", async () => {
+    const { session, onmessage } = await startLiveCall();
+    vi.useFakeTimers();
+    onmessage(agentDone);
+
+    vi.advanceTimersByTime(9_999);
+    expect(sentTexts(session)).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(sentTexts(session)[1]).toMatch(/^Call system:.*still there/);
+  });
+
+  it("says goodbye and ends after a second silence", async () => {
+    const { h, session, onmessage } = await startLiveCall();
+    vi.useFakeTimers();
+    onmessage(agentDone);
+    vi.advanceTimersByTime(10_000);
+    onmessage(agentDone);
+    vi.advanceTimersByTime(10_000);
+    expect(sentTexts(session)[2]).toMatch(/^Call system:.*goodbye/);
+    expect(h.onEvent).not.toHaveBeenCalledWith({ type: "END" });
+
+    onmessage(agentDone);
+    expect(h.onEvent).toHaveBeenCalledWith({ type: "END" });
+  });
+
+  it("starts over when the customer speaks", async () => {
+    const { session, onmessage } = await startLiveCall();
+    vi.useFakeTimers();
+    onmessage(agentDone);
+    vi.advanceTimersByTime(10_000);
+    onmessage(customerSpeech);
+    vi.advanceTimersByTime(700);
+    onmessage(agentDone);
+    vi.advanceTimersByTime(10_000);
+    expect(sentTexts(session)[2]).toMatch(/still there/);
+  });
+});
+
+describe("call length limit", () => {
+  it("asks Aria to wrap up a minute before the limit, then ends the call", async () => {
+    vi.useFakeTimers();
+    const { h, session, onmessage } = await startLiveCall();
+    const keepTalking = setInterval(() => onmessage(customerSpeech), 5_000);
+
+    vi.advanceTimersByTime(9 * 60_000);
+    expect(sentTexts(session).some((text) => /^Call system:.*wrap up/i.test(text))).toBe(true);
+    expect(h.onEvent).not.toHaveBeenCalledWith({ type: "END" });
+    vi.advanceTimersByTime(60_000);
+    expect(h.onEvent).toHaveBeenCalledWith({ type: "END" });
+    clearInterval(keepTalking);
+  });
+});
+
+describe("session resumption", () => {
+  it("reconnects with the latest handle on goAway without restarting the mic", async () => {
+    const { h, session, onmessage } = await startLiveCall();
+    const next = fakeSession();
+    mocks.connect.mockResolvedValueOnce(next);
+    onmessage({ sessionResumptionUpdate: { newHandle: "h1", resumable: true } });
+    onmessage({ sessionResumptionUpdate: { newHandle: "", resumable: false } });
+
+    onmessage({ goAway: { timeLeft: "5s" } });
+    await flush();
+
+    expect(mocks.getToken).toHaveBeenLastCalledWith("h1");
+    expect(mocks.connect).toHaveBeenCalledTimes(2);
+    expect(session.close).toHaveBeenCalled();
+    expect(mocks.startMicRecorder).toHaveBeenCalledTimes(1);
+    expect(next.sendClientContent).not.toHaveBeenCalled();
+
+    const sendAudio = mocks.startMicRecorder.mock.calls[0]?.[0] as (data: string) => void;
+    sendAudio("pcm");
+    expect(next.sendRealtimeInput).toHaveBeenCalled();
+    expect(h.onEvent).not.toHaveBeenCalledWith({ type: "END" });
+  });
+
+  it("resumes once after an unexpected disconnect", async () => {
+    const { h, onmessage, onclose } = await startLiveCall();
+    mocks.connect.mockResolvedValueOnce(fakeSession());
+    onmessage({ sessionResumptionUpdate: { newHandle: "h1", resumable: true } });
+
+    onclose({ reason: "network" });
+    await flush();
+
+    expect(mocks.connect).toHaveBeenCalledTimes(2);
+    expect(h.onEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: "ERROR" }));
+  });
+
+  it("fails when the session drops before any handle arrived", async () => {
+    const { h, onclose } = await startLiveCall();
+    onclose({ reason: "network" });
+    expect(h.onEvent).toHaveBeenCalledWith({ type: "ERROR", message: "Call disconnected: network" });
+  });
+});
+
 describe("parseDurationMs", () => {
   it.each([
     ["5s", 5000],

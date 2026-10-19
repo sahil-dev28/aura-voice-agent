@@ -21,7 +21,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body.data;
 }
 
-export const getToken = () => request<TokenResponse>("/api/token", { method: "POST" });
+export const getToken = (resumeHandle?: string) =>
+  request<TokenResponse>("/api/token", {
+    method: "POST",
+    body: JSON.stringify(resumeHandle ? { resume_handle: resumeHandle } : {}),
+  });
 
 export const getOrders = () => request<OrderView[]>("/api/orders");
 

@@ -45,6 +45,9 @@ End Call ── POST /api/summary ───────────► Gemini Fl
 3. **Playback**: 24 kHz PCM chunks go into a playback worklet queue. When Gemini signals `interrupted` (the customer talked over Aria), the queue is flushed instantly. That's barge-in.
 4. **State indicator**: a small pure state machine maps session events to Listening / Thinking / Speaking (`apps/web/src/lib/live/sessionReducer.ts`).
 5. **Transcript**: Gemini's input and output transcriptions are merged into speaker turns, with tool calls shown inline.
+6. **Silence**: after 10 seconds of silence while Aria is waiting, she asks if the customer is still there. After another 10 seconds she says goodbye and the call ends. These prompts are sent as `Call system:` messages, which the system prompt tells Aria to follow without reading out.
+7. **Call length**: calls are capped at 10 minutes. A minute before the cap, Aria is told to wrap up and offer a specialist ticket if the issue is still open.
+8. **Reconnecting**: session resumption is on. The browser keeps the latest resume handle, and when Gemini sends `goAway` or the connection drops, it asks the server for a new token with that handle locked in and switches to the new session. The mic, speaker and transcript keep running, and Aria keeps the conversation context. If there is no handle yet, the call ends as before.
 
 ## How Aria decides to use a tool
 
@@ -142,7 +145,7 @@ I fixed it in layers instead of relying on one big prompt:
 - **Blocking tools and hard prompt rules.** Tools are declared as blocking so Aria waits for the result instead of talking over it, and the prompt forbids stating order facts or promising actions without a tool result from this call.
 - **Server-side ID normalisation.** "one oh one", "one hundred and three", "double one" and "ORD 101" all resolve to `ORD-101`. Anything that doesn't parse, or isn't found, comes back as a normal result, so Aria reads the ID back and asks the customer to check it instead of guessing.
 
-The other hard part was the call lifecycle. Audio, the WebSocket, tool calls and timers all run asynchronously, so ending a call and quickly starting a new one could let late messages from the old session leak into the new one. Every call now gets a run ID; callbacks from a stale run are ignored, cancelled tool calls are dropped, and Gemini's `goAway` notice is honoured using its `timeLeft` so the call ends cleanly instead of being cut off.
+The other hard part was the call lifecycle. Audio, the WebSocket, tool calls and timers all run asynchronously, so ending a call and quickly starting a new one could let late messages from the old session leak into the new one. Every call now gets a run ID; callbacks from a stale run are ignored, cancelled tool calls are dropped, and when Gemini sends `goAway` the call resumes on a new session with the same context (or, if it can't resume yet, ends cleanly using `timeLeft` instead of being cut off).
 
 ### 3. One more week: what first and why?
 
@@ -156,7 +159,7 @@ After that, in order:
 ### 4. At 1,000 conversations a day, what changes?
 
 1,000 calls a day is only around 10 to 30 calls at the same time at peak, so the architecture holds: audio already goes browser → Gemini directly and the API is stateless. What changes is everything around it:
-- **Quotas and cost.** Move to a paid Gemini tier with enough concurrent Live sessions, set a maximum call length and idle timeout, and track cost per call.
+- **Quotas and cost.** Move to a paid Gemini tier with enough concurrent Live sessions, tune the 10-minute call cap and the silence timeout from real calls, and track cost per call.
 - **Shared state.** The in-memory rate limiter only works per serverless instance, so it moves to Redis (or the platform's edge rate limiting). Rate limits should also be per verified customer, not just per IP.
 - **Real data.** The mock order list becomes the real order and returns system, with timeouts, retries and caching, and allowed actions actually create the cancellation or return.
 - **Storage and privacy.** Save transcripts, tool calls and summaries to a database for QA, analytics and disputes, with a retention policy and PII redaction.

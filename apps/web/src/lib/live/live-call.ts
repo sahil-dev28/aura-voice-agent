@@ -9,7 +9,7 @@ import {
 import { ApiError, callTool, getToken } from "@/lib/api";
 import { type AudioPlayer, createAudioPlayer } from "@/lib/audio/audio-player";
 import { type MicRecorder, startMicRecorder } from "@/lib/audio/mic-recorder";
-import type { SessionEvent } from "@/lib/live/sessionReducer";
+import { type SessionEvent, initialSessionState, sessionReducer } from "@/lib/live/sessionReducer";
 import { describeToolEvent, filterCancelled, findEscalation } from "@/lib/live/toolEvents";
 import { addToolEntry, appendTranscript } from "@/lib/live/transcript";
 import type { ToolEvent, TranscriptEntry } from "@/lib/types";
@@ -24,6 +24,15 @@ export type LiveCallHandlers = {
 const USER_PAUSE_MS = 700;
 const TOOL_TIMEOUT_MS = 5000;
 const GREETING_TRIGGER = "The customer has just joined the call. Greet them now.";
+const SILENCE_MS = 10_000;
+const GOODBYE_GRACE_MS = 10_000;
+const CALL_LIMIT_MS = 10 * 60_000;
+const WRAP_UP_BEFORE_MS = 60_000;
+const MAX_RESUMES = 3;
+const STILL_THERE = "Call system: The customer has been silent for a while. Briefly ask if they are still there.";
+const GOODBYE = "Call system: The customer is still silent. Say a short, polite goodbye now. The call ends after it.";
+const WRAP_UP =
+  "Call system: This call ends in about one minute. Wrap up now, and if the issue is not resolved, offer a specialist ticket.";
 
 export function parseDurationMs(duration: string | undefined): number {
   const seconds = Number.parseFloat(duration ?? "");
@@ -45,8 +54,19 @@ export function createLiveCall(handlers: LiveCallHandlers) {
   let player: AudioPlayer | null = null;
   let pauseTimer: ReturnType<typeof setTimeout> | undefined;
   let goAwayTimer: ReturnType<typeof setTimeout> | undefined;
+  let silenceTimer: ReturnType<typeof setTimeout> | undefined;
+  let goodbyeTimer: ReturnType<typeof setTimeout> | undefined;
+  let wrapUpTimer: ReturnType<typeof setTimeout> | undefined;
+  let limitTimer: ReturnType<typeof setTimeout> | undefined;
   let active = false;
   let runId = 0;
+  let link = 0;
+  let callState = initialSessionState;
+  let nudged = false;
+  let closing = false;
+  let resumeHandle: string | undefined;
+  let resuming = false;
+  let resumes = 0;
   let transcript: TranscriptEntry[] = [];
   let toolEvents: ToolEvent[] = [];
   const cancelled = new Set<string>();
@@ -56,9 +76,11 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     handlers.onTranscript(next);
   };
 
+  const sendText = (text: string) =>
+    session?.sendClientContent({ turns: [{ role: "user", parts: [{ text }] }], turnComplete: true });
+
   const teardown = () => {
-    clearTimeout(pauseTimer);
-    clearTimeout(goAwayTimer);
+    for (const timer of [pauseTimer, goAwayTimer, silenceTimer, goodbyeTimer, wrapUpTimer, limitTimer]) clearTimeout(timer);
     mic?.stop();
     mic = null;
     session?.close();
@@ -71,15 +93,47 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     if (!active) return;
     active = false;
     teardown();
-    handlers.onEvent(event);
+    emit(event);
     handlers.onFinished({ transcript, toolEvents });
   };
 
   const end = () => finish({ type: "END" });
   const fail = (message: string) => finish({ type: "ERROR", message });
 
+  const onSilence = () => {
+    if (!nudged) {
+      nudged = true;
+      sendText(STILL_THERE);
+      return;
+    }
+    closing = true;
+    sendText(GOODBYE);
+    goodbyeTimer = setTimeout(end, GOODBYE_GRACE_MS);
+  };
+
+  // Silence is counted only while Aria is waiting for the customer.
+  const watchSilence = (event: SessionEvent) => {
+    clearTimeout(silenceTimer);
+    if (!active) return;
+    if (event.type === "USER_TRANSCRIPT") {
+      nudged = false;
+      closing = false;
+      clearTimeout(goodbyeTimer);
+      return;
+    }
+    if (callState.status !== "listening") return;
+    if (closing) return end();
+    silenceTimer = setTimeout(onSilence, SILENCE_MS);
+  };
+
+  function emit(event: SessionEvent) {
+    callState = sessionReducer(callState, event);
+    handlers.onEvent(event);
+    watchSilence(event);
+  }
+
   async function runTools(calls: FunctionCall[]) {
-    handlers.onEvent({ type: "TOOL_CALL" });
+    emit({ type: "TOOL_CALL" });
     const responses: FunctionResponse[] = await Promise.all(
       calls.map(async (call) => {
         const name = call.name ?? "";
@@ -108,14 +162,14 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     if (content) {
       if (content.interrupted) {
         player?.flush();
-        handlers.onEvent({ type: "INTERRUPTED" });
+        emit({ type: "INTERRUPTED" });
       }
       const userText = content.inputTranscription?.text;
       if (userText) {
         setTranscript(appendTranscript(transcript, "customer", userText, Date.now()));
-        handlers.onEvent({ type: "USER_TRANSCRIPT" });
+        emit({ type: "USER_TRANSCRIPT" });
         clearTimeout(pauseTimer);
-        pauseTimer = setTimeout(() => handlers.onEvent({ type: "USER_PAUSE" }), USER_PAUSE_MS);
+        pauseTimer = setTimeout(() => emit({ type: "USER_PAUSE" }), USER_PAUSE_MS);
       }
       const agentText = content.outputTranscription?.text;
       if (agentText) setTranscript(appendTranscript(transcript, "agent", agentText, Date.now()));
@@ -123,16 +177,70 @@ export function createLiveCall(handlers: LiveCallHandlers) {
         const data = part.inlineData?.data;
         if (data && part.inlineData?.mimeType?.startsWith("audio/")) {
           player?.enqueue(data);
-          handlers.onEvent({ type: "AUDIO_CHUNK" });
+          emit({ type: "AUDIO_CHUNK" });
         }
       }
-      if (content.turnComplete) handlers.onEvent({ type: "TURN_COMPLETE" });
+      if (content.turnComplete) emit({ type: "TURN_COMPLETE" });
     }
     for (const id of message.toolCallCancellation?.ids ?? []) cancelled.add(id);
     if (message.toolCall?.functionCalls?.length) void runTools(message.toolCall.functionCalls);
+    const update = message.sessionResumptionUpdate;
+    if (update?.resumable && update.newHandle) resumeHandle = update.newHandle;
     if (message.goAway) {
       clearTimeout(goAwayTimer);
-      goAwayTimer = setTimeout(end, parseDurationMs(message.goAway.timeLeft));
+      if (resumeHandle) void resume(runId);
+      else goAwayTimer = setTimeout(end, parseDurationMs(message.goAway.timeLeft));
+    }
+  }
+
+  // Opens a Live session and makes it the current one. The previous session, if any, is closed.
+  async function connect(run: number, handle?: string): Promise<boolean> {
+    const { token, model } = await getToken(handle);
+    if (run !== runId || !active) return false;
+    const id = link + 1;
+    const current = () => run === runId && id === link;
+    const ai = new GoogleGenAI({ apiKey: token, httpOptions: { apiVersion: "v1alpha" } });
+    const connected = await ai.live.connect({
+      model,
+      callbacks: {
+        onmessage: (message) => {
+          if (current()) handleMessage(message);
+        },
+        onerror: () => {
+          if (current()) dropped("The call connection failed. Please try again.");
+        },
+        onclose: (event) => {
+          if (current() && active) dropped(event.reason ? `Call disconnected: ${event.reason}` : "The call was disconnected.");
+        },
+      },
+    });
+    if (run !== runId || !active) {
+      connected.close();
+      return false;
+    }
+    const previous = session;
+    link = id;
+    session = connected;
+    previous?.close();
+    return true;
+  }
+
+  function dropped(message: string) {
+    if (resuming) return;
+    if (resumeHandle && resumes < MAX_RESUMES) void resume(runId);
+    else fail(message);
+  }
+
+  async function resume(run: number) {
+    if (resuming || !resumeHandle) return;
+    resuming = true;
+    resumes += 1;
+    try {
+      await connect(run, resumeHandle);
+    } catch {
+      if (run === runId) fail("The call was disconnected.");
+    } finally {
+      resuming = false;
     }
   }
 
@@ -141,16 +249,22 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     const run = ++runId;
     const stale = () => run !== runId || !active;
     active = true;
+    callState = initialSessionState;
+    nudged = false;
+    closing = false;
+    resumeHandle = undefined;
+    resuming = false;
+    resumes = 0;
     transcript = [];
     toolEvents = [];
     cancelled.clear();
     handlers.onTranscript([]);
     handlers.onToolEvents([]);
-    handlers.onEvent({ type: "START" });
+    emit({ type: "START" });
 
     try {
       const runPlayer = await createAudioPlayer(() => {
-        if (run === runId) handlers.onEvent({ type: "PLAYBACK_DRAINED" });
+        if (run === runId) emit({ type: "PLAYBACK_DRAINED" });
       });
       if (stale()) return runPlayer.close();
       player = runPlayer;
@@ -159,33 +273,11 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       });
       if (stale()) return runMic.stop();
       mic = runMic;
-      const { token, model } = await getToken();
-      if (stale()) return;
-
-      const ai = new GoogleGenAI({ apiKey: token, httpOptions: { apiVersion: "v1alpha" } });
-      const connected = await ai.live.connect({
-        model,
-        callbacks: {
-          onmessage: (message) => {
-            if (run === runId) handleMessage(message);
-          },
-          onerror: () => {
-            if (run === runId) fail("The call connection failed. Please try again.");
-          },
-          onclose: (event) => {
-            if (run === runId && active) {
-              fail(event.reason ? `Call disconnected: ${event.reason}` : "The call was disconnected.");
-            }
-          },
-        },
-      });
-      if (stale()) {
-        connected.close();
-        return;
-      }
-      session = connected;
-      handlers.onEvent({ type: "OPEN" });
-      session.sendClientContent({ turns: [{ role: "user", parts: [{ text: GREETING_TRIGGER }] }], turnComplete: true });
+      if (!(await connect(run))) return;
+      emit({ type: "OPEN" });
+      wrapUpTimer = setTimeout(() => sendText(WRAP_UP), CALL_LIMIT_MS - WRAP_UP_BEFORE_MS);
+      limitTimer = setTimeout(end, CALL_LIMIT_MS);
+      sendText(GREETING_TRIGGER);
     } catch (error) {
       if (run === runId) fail(startErrorMessage(error));
     }

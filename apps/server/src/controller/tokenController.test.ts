@@ -27,6 +27,23 @@ describe("POST /api/token", () => {
     expect(config.liveConnectConstraints.model).toBe(res.body.data.model);
     expect(String(config.liveConnectConstraints.config.systemInstruction)).toContain("Aria");
     expect(new Date(config.expireTime).getTime()).toBeGreaterThan(Date.now() + 25 * 60_000);
+    expect(config.liveConnectConstraints.config.sessionResumption).toEqual({});
+  });
+
+  it("locks a resume handle into the config when reconnecting", async () => {
+    create.mockResolvedValueOnce({ name: "auth_tokens/def" });
+    const res = await request(app).post("/api/token").send({ resume_handle: "handle-1" });
+
+    expect(res.status).toBe(200);
+    const { config } = create.mock.calls[0]?.[0];
+    expect(config.liveConnectConstraints.config.sessionResumption).toEqual({ handle: "handle-1" });
+  });
+
+  it("rejects a resume handle that is not a string", async () => {
+    const res = await request(app).post("/api/token").send({ resume_handle: 42 });
+    expect(res.status).toBe(400);
+    expect(res.body.fieldErrors).toHaveProperty("resume_handle");
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("hides upstream errors", async () => {

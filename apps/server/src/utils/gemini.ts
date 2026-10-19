@@ -12,7 +12,7 @@ export function getGenAI(): GoogleGenAI {
   return client;
 }
 
-export function liveConnectConfig(now: Date): LiveConnectConfig {
+export function liveConnectConfig(now: Date, resumeHandle?: string): LiveConnectConfig {
   return {
     responseModalities: [Modality.AUDIO],
     systemInstruction: buildSystemPrompt(now),
@@ -20,6 +20,7 @@ export function liveConnectConfig(now: Date): LiveConnectConfig {
     speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: env.GEMINI_VOICE } } },
     inputAudioTranscription: {},
     outputAudioTranscription: {},
+    sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
     realtimeInputConfig: {
       automaticActivityDetection: {
         startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,

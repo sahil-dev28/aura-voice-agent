@@ -26,6 +26,11 @@ describe("liveConnectConfig", () => {
     expect(behaviors).toEqual(["BLOCKING", "BLOCKING", "BLOCKING", "BLOCKING"]);
   });
 
+  it("turns on session resumption, with the handle when resuming", () => {
+    expect(config.sessionResumption).toEqual({});
+    expect(liveConnectConfig(new Date(), "handle-1").sessionResumption).toEqual({ handle: "handle-1" });
+  });
+
   it("locks the system prompt and voice", () => {
     expect(String(config.systemInstruction)).toContain("Aria");
     expect(config.speechConfig?.voiceConfig?.prebuiltVoiceConfig?.voiceName).toBeTruthy();

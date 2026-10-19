@@ -2,13 +2,15 @@ import type { Request, Response } from "express";
 
 import { env } from "@aura/env/server";
 
+import type { TokenRequestInput } from "@/schema/token";
 import { getGenAI, liveConnectConfig } from "@/utils/gemini";
 
 const TOKEN_TTL_MS = 30 * 60_000;
 const NEW_SESSION_TTL_MS = 60_000;
 
-export const createToken = async (_req: Request, res: Response): Promise<void> => {
+export const createToken = async (req: Request, res: Response): Promise<void> => {
   try {
+    const { resume_handle } = req.body as TokenRequestInput;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + TOKEN_TTL_MS).toISOString();
     const token = await getGenAI().authTokens.create({
@@ -16,7 +18,7 @@ export const createToken = async (_req: Request, res: Response): Promise<void> =
         uses: 1,
         expireTime: expiresAt,
         newSessionExpireTime: new Date(now.getTime() + NEW_SESSION_TTL_MS).toISOString(),
-        liveConnectConstraints: { model: env.GEMINI_LIVE_MODEL, config: liveConnectConfig(now) },
+        liveConnectConstraints: { model: env.GEMINI_LIVE_MODEL, config: liveConnectConfig(now, resume_handle) },
       },
     });
     if (!token.name) throw new Error("Token response had no name");
