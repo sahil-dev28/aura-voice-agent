@@ -6,6 +6,7 @@
     "build": "tsdown",
     "check-types": "tsc -b",
     "dev": "tsx watch src/app.ts",
+    "eval": "NODE_ENV=test tsx src/evals/run.ts",
     "start": "node dist/app.mjs",
     "test": "vitest run"
   },

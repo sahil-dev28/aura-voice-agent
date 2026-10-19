@@ -81,7 +81,7 @@ All four are declared as blocking, so Aria waits for the real result instead of 
 - Confirmed actions return a reference ID but don't change the mock data, so every tester sees the same orders.
 - ORD-104 (delivered 20 hours ago) is an extra test order that isn't in the brief. None of the brief's orders is inside the 48-hour damage window, so without it the replacement and photo flow couldn't be tried.
 - Uploaded photos are checked and counted but not stored; only their size and type are kept in memory. A real system would put them in object storage against the replacement request.
-- The token, summary and tool endpoints are rate-limited in memory per IP (5, 10 and 120 calls per 10 minutes). On serverless, this applies per instance; a shared store such as Redis would be needed at scale.
+- The token, summary, tool, photo and metrics endpoints are rate-limited in memory per IP (5, 10, 120, 20 and 10 calls per 10 minutes). Reconnecting a dropped call uses one of the 5 token requests. On serverless, this applies per instance; a shared store such as Redis would be needed at scale.
 
 ## Running locally
 
@@ -107,17 +107,18 @@ pnpm dev                                       # web http://localhost:3000, api 
 apps/
   server/src/
     agent/        system prompt, brand knowledge, tool declarations
-    controller/   token, tool and summary handlers
-    data/         mock order database
+    controller/   token, tool, summary, photo and metrics handlers
+    data/         mock orders, recorded requests, verification lockout
+    evals/        conversation test scenarios, runner and scorer
     middleware/   validation, rate limit
-    routes/       /api/token, /api/tools, /api/orders, /api/summary
+    routes/       /api/token, /api/tools, /api/orders, /api/summary, /api/replacements, /api/metrics
     schema/       Zod schemas
-    utils/        order ID normalisation, policy rules, Gemini client
+    utils/        order ID and phone normalisation, policy rules, Gemini client
   web/src/
     app/          Next.js App Router
     components/   call UI
     lib/audio/    mic capture, playback, PCM helpers
-    lib/live/     live session controller, state machine, transcript
+    lib/live/     live session controller, state machine, transcript, metrics
 packages/
   config/  env/  ui/
 ```
@@ -125,14 +126,29 @@ packages/
 ## Testing
 
 `pnpm test` covers:
-- order ID normalisation
+- order ID and phone digit normalisation
 - every policy rule, including the 20-day opened return and the 48-hour damage window
-- the tool, token and summary endpoints, with Gemini mocked
+- the tool, token, summary, photo and metrics endpoints, with Gemini mocked, including verification and its lockout
 - the rate limiter
-- PCM conversion
-- every state-machine transition
+- PCM conversion and photo resizing maths
+- every state-machine transition, the live call controller (silence, call limit, reconnecting, mute, typing, metrics) and the transcript helpers
+- the conversation test runner and scorer
 
-The voice flow itself is checked by hand against a list of test conversations: tracking, a refused return, an allowed cancellation, missing and unknown IDs, an out-of-scope request, barge-in, and Hinglish.
+### Conversation tests
+
+`pnpm --filter server eval` runs scripted conversations against the real Gemini Live model with the same locked config as production, and scores each one automatically. Customer turns go in through the typed-message path, tool calls hit the real tool API in-process, and each scenario checks which tools were called (and with which arguments) and what Aria said or must not say. The scenarios are in `apps/server/src/evals/scenarios.ts`:
+
+tracking, wrong verification digits, missing ID, unknown ID (Aria must not try other IDs), refused return, confirmed cancellation, declined cancellation (nothing recorded), damage replacement (photo upload offered), handoff to a person, off-topic request, a typed message pretending to be a `Call system:` instruction, and Hinglish.
+
+```bash
+pnpm --filter server eval                        # every scenario once
+pnpm --filter server eval hinglish tracking      # selected scenarios
+pnpm --filter server eval --repeat 3             # pass rate over 3 runs, since model output varies
+```
+
+It uses your Gemini quota (one Live session per scenario run) and exits non-zero if any run fails, printing the failed checks and the transcript. On the first run it caught a real gap: Aria answered a Hinglish question in English, which led to a clearer language rule in the prompt. The current prompt passes all 12 scenarios twice in a row.
+
+Audio-only behaviour (speech recognition, barge-in, the silence check-in) isn't covered by these tests; I checked it by driving the app in a browser with synthesised speech.
 
 ## How I think about it
 
@@ -157,12 +173,11 @@ The other hard part was the call lifecycle. Audio, the WebSocket, tool calls and
 
 ### 3. One more week: what first and why?
 
-**An automated conversation test suite.** Right now the policy and plumbing are well covered by unit tests, but the conversation itself (does Aria call the tool, read back the ID, refuse politely, switch to Hinglish) is checked by hand. That is the riskiest part and the one most likely to regress whenever I change the prompt, the tools or the model version. I'd script the test conversations (tracking, refused return, allowed cancellation, missing and unknown IDs, off-topic, barge-in, Hinglish), play them in as synthesised audio, and score the transcript and tool calls automatically against expected outcomes. Every later change becomes safer once that exists.
+The conversation test suite, customer verification and per-call latency numbers from my first answer to this question are now built, so the next week would go to:
 
-After that, in order:
-1. **Customer verification** (phone or email match) before sharing order details.
-2. **Latency and error telemetry**: time to first audio, tool round-trip, interruptions and disconnects per call, so tuning is based on numbers.
-3. **Real human handoff**: `escalate_to_human` opens a callback ticket today. Next, send that ticket and the call summary to a real support queue, and offer a live transfer when a specialist is free.
+1. **Audio in the conversation tests.** The scenarios run on typed turns today. Feeding the same scenarios in as synthesised speech (Indian English and Hinglish voices, with some background noise) would cover speech recognition, barge-in and the silence check-in, which are still checked by hand.
+2. **A real handoff.** `escalate_to_human` opens a callback ticket. Next, send the ticket and the call summary to a real support queue, and offer a live transfer when a specialist is free.
+3. **Stronger verification.** Replace the last-four-digits check with a one-time code sent to the phone number on the order.
 
 ### 4. At 1,000 conversations a day, what changes?
 
