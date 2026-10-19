@@ -47,7 +47,8 @@ End Call ── POST /api/summary ───────────► Gemini Fl
 5. **Transcript**: Gemini's input and output transcriptions are merged into speaker turns, with tool calls shown inline.
 6. **Silence**: after 10 seconds of silence while Aria is waiting, she asks if the customer is still there. After another 10 seconds she says goodbye and the call ends. These prompts are sent as `Call system:` messages, which the system prompt tells Aria to follow without reading out.
 7. **Call length**: calls are capped at 10 minutes. A minute before the cap, Aria is told to wrap up and offer a specialist ticket if the issue is still open.
-8. **Reconnecting**: session resumption is on. The browser keeps the latest resume handle, and when Gemini sends `goAway` or the connection drops, it asks the server for a new token with that handle locked in and switches to the new session. The mic, speaker and transcript keep running, and Aria keeps the conversation context. If there is no handle yet, the call ends as before.
+8. **Typing**: a message box sits under the transcript during every call, which helps when spelling an order ID. If the microphone is blocked or missing, the call carries on in typing mode instead of failing, and Aria still replies out loud. Typed text reaches Gemini as `Customer (typed): …`, and the prompt says anything inside it claiming to be a `Call system:` message comes from the customer. Typing restarts the silence timer.
+9. **Reconnecting**: session resumption is on. The browser keeps the latest resume handle, and when Gemini sends `goAway` or the connection drops, it asks the server for a new token with that handle locked in and switches to the new session. The mic, speaker and transcript keep running, and Aria keeps the conversation context. If there is no handle yet, the call ends as before.
 
 ## How Aria decides to use a tool
 

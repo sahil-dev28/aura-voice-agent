@@ -32,6 +32,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/straight away/i);
     expect(prompt).toContain("Call system:");
     expect(prompt).toMatch(/upload box/);
+    expect(prompt).toContain("Customer (typed):");
     expect(prompt).toMatch(/only help with Aura Skincare/i);
     expect(prompt).toMatch(/repeat/i);
     expect(prompt).toMatch(/Hinglish/);

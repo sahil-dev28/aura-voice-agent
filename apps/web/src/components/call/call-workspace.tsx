@@ -8,15 +8,31 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aura
 import { CallControls } from "@/components/call/call-controls";
 import { CallSummary } from "@/components/call/call-summary";
 import { LiveTranscript } from "@/components/call/live-transcript";
+import { MessageBox } from "@/components/call/message-box";
 import { PhotoUploadCard } from "@/components/call/photo-upload-card";
 import { StateIndicator } from "@/components/call/state-indicator";
 import { TestOrdersCard } from "@/components/call/test-orders-card";
+import { isLive } from "@/lib/live/sessionReducer";
 import { findReplacement } from "@/lib/live/toolEvents";
 import { useLiveSession } from "@/lib/live/use-live-session";
 
 export function CallWorkspace() {
-  const { state, transcript, toolEvents, summary, muted, start, end, toggleMute, notePhotos, setBusy, retrySummary } =
-    useLiveSession();
+  const {
+    state,
+    transcript,
+    toolEvents,
+    summary,
+    muted,
+    inputMode,
+    start,
+    end,
+    toggleMute,
+    notePhotos,
+    setBusy,
+    sendTyped,
+    noteTyping,
+    retrySummary,
+  } = useLiveSession();
   const replacement = findReplacement(toolEvents);
 
   useEffect(() => {
@@ -30,7 +46,8 @@ export function CallWorkspace() {
           <CardHeader>
             <CardTitle>Call Aria</CardTitle>
             <CardDescription>
-              Allow microphone access when asked. Speak naturally; you can interrupt Aria at any time.
+              Allow microphone access when asked. Speak naturally; you can interrupt Aria at any time. No
+              microphone? You can type instead.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -38,6 +55,7 @@ export function CallWorkspace() {
               <CallControls
                 status={state.status}
                 muted={muted}
+                canMute={inputMode === "voice"}
                 onStart={start}
                 onEnd={end}
                 onToggleMute={toggleMute}
@@ -48,6 +66,9 @@ export function CallWorkspace() {
             </div>
             {state.status === "error" && state.error && <p className="text-destructive text-sm">{state.error}</p>}
             <LiveTranscript entries={transcript} />
+            {isLive(state.status) && (
+              <MessageBox typingOnly={inputMode === "text"} onSend={sendTyped} onTyping={noteTyping} />
+            )}
           </CardContent>
         </Card>
         {replacement && (

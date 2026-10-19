@@ -7,12 +7,13 @@ import { type CallStatus, isLive } from "@/lib/live/sessionReducer";
 type Props = {
   status: CallStatus;
   muted: boolean;
+  canMute: boolean;
   onStart: () => void;
   onEnd: () => void;
   onToggleMute: () => void;
 };
 
-export function CallControls({ status, muted, onStart, onEnd, onToggleMute }: Props) {
+export function CallControls({ status, muted, canMute, onStart, onEnd, onToggleMute }: Props) {
   const inCall = status === "connecting" || isLive(status);
   if (!inCall) {
     return (
@@ -24,7 +25,7 @@ export function CallControls({ status, muted, onStart, onEnd, onToggleMute }: Pr
   }
   return (
     <div className="flex gap-2">
-      {isLive(status) && (
+      {isLive(status) && canMute && (
         <Button size="lg" variant="outline" aria-pressed={muted} onClick={onToggleMute} className="flex-1 sm:flex-none">
           {muted ? <MicOff data-icon="inline-start" /> : <Mic data-icon="inline-start" />}
           {muted ? "Unmute" : "Mute"}

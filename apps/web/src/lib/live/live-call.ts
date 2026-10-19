@@ -19,11 +19,14 @@ export type LiveCallHandlers = {
   onTranscript: (entries: TranscriptEntry[]) => void;
   onToolEvents: (events: ToolEvent[]) => void;
   onFinished: (call: { transcript: TranscriptEntry[]; toolEvents: ToolEvent[] }) => void;
+  onInputMode: (mode: "voice" | "text") => void;
 };
 
 const USER_PAUSE_MS = 700;
 const TOOL_TIMEOUT_MS = 5000;
 const GREETING_TRIGGER = "The customer has just joined the call. Greet them now.";
+const TYPING_GREETING =
+  "The customer has just joined the call. Their microphone is unavailable, so they will type their messages. Greet them now.";
 const SILENCE_MS = 10_000;
 const SPEECH_LEVEL = 0.02;
 const GOODBYE_GRACE_MS = 10_000;
@@ -40,11 +43,10 @@ export function parseDurationMs(duration: string | undefined): number {
   return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : 0;
 }
 
+const micUnavailable = (error: unknown) =>
+  error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "NotFoundError");
+
 function startErrorMessage(error: unknown): string {
-  if (error instanceof DOMException && error.name === "NotAllowedError") {
-    return "Microphone access is blocked. Allow microphone access for this site and try again.";
-  }
-  if (error instanceof DOMException && error.name === "NotFoundError") return "No microphone was found.";
   if (error instanceof ApiError) return error.message;
   return "Couldn't start the call, please try again.";
 }
@@ -305,18 +307,25 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       });
       if (stale()) return runPlayer.close();
       player = runPlayer;
-      const runMic = await startMicRecorder((data, level) => {
-        if (run !== runId || muted) return;
-        if (level >= SPEECH_LEVEL) heardCustomer();
-        session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } });
-      });
-      if (stale()) return runMic.stop();
+      // A blocked or missing mic doesn't end the call: the customer types instead.
+      let runMic: MicRecorder | null = null;
+      try {
+        runMic = await startMicRecorder((data, level) => {
+          if (run !== runId || muted) return;
+          if (level >= SPEECH_LEVEL) heardCustomer();
+          session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } });
+        });
+      } catch (error) {
+        if (!micUnavailable(error)) throw error;
+      }
+      if (stale()) return runMic?.stop();
       mic = runMic;
+      handlers.onInputMode(mic ? "voice" : "text");
       if (!(await connect(run))) return;
       emit({ type: "OPEN" });
       wrapUpTimer = setTimeout(() => sendText(WRAP_UP), CALL_LIMIT_MS - WRAP_UP_BEFORE_MS);
       limitTimer = setTimeout(end, CALL_LIMIT_MS);
-      sendText(GREETING_TRIGGER);
+      sendText(mic ? GREETING_TRIGGER : TYPING_GREETING);
     } catch (error) {
       if (run === runId) fail(startErrorMessage(error));
     }
@@ -338,5 +347,15 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     sendText(`Call system: The customer has now uploaded ${photos} of the damage for ${upload.referenceId}.`);
   };
 
-  return { start, end, dispose, setMuted, setBusy, notePhotos };
+  // Typed text is labelled so a customer can't pass it off as a "Call system:" instruction.
+  const sendTyped = (raw: string) => {
+    const text = raw.trim();
+    if (!active || !session || !text) return;
+    setTranscript(closeTurn(appendTranscript(closeTurn(transcript), "customer", text, Date.now())));
+    emit({ type: "USER_TRANSCRIPT" });
+    emit({ type: "USER_PAUSE" });
+    sendText(`Customer (typed): ${text}`);
+  };
+
+  return { start, end, dispose, setMuted, setBusy, notePhotos, sendTyped, noteTyping: heardCustomer };
 }

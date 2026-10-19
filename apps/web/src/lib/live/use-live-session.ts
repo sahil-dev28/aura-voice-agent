@@ -33,6 +33,7 @@ export function useLiveSession() {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [summary, setSummary] = useState<SummaryState>({ status: "idle" });
   const [muted, setMuted] = useState(false);
+  const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
   const lastCall = useRef<FinishedCall | null>(null);
 
   const [call] = useState(() =>
@@ -40,6 +41,7 @@ export function useLiveSession() {
       onEvent: dispatch,
       onTranscript: setTranscript,
       onToolEvents: setToolEvents,
+      onInputMode: setInputMode,
       onFinished: (finished) => {
         lastCall.current = finished;
         setMuted(false);
@@ -71,11 +73,14 @@ export function useLiveSession() {
     toolEvents,
     summary,
     muted,
+    inputMode,
     start,
     end: call.end,
     toggleMute,
     notePhotos: call.notePhotos,
     setBusy: call.setBusy,
+    sendTyped: call.sendTyped,
+    noteTyping: call.noteTyping,
     retrySummary,
   };
 }

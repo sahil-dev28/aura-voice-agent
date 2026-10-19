@@ -45,7 +45,7 @@ function deferred<T>() {
 }
 
 function handlers() {
-  return { onEvent: vi.fn(), onTranscript: vi.fn(), onToolEvents: vi.fn(), onFinished: vi.fn() };
+  return { onEvent: vi.fn(), onTranscript: vi.fn(), onToolEvents: vi.fn(), onFinished: vi.fn(), onInputMode: vi.fn() };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -318,6 +318,69 @@ describe("photo uploads", () => {
     call.end();
     call.notePhotos({ referenceId: "RPL-1A2B", photoCount: 1, maxPhotos: 3 });
     expect(sentTexts(session)).toHaveLength(1);
+  });
+});
+
+describe("typing", () => {
+  it("carries on in typing mode when the mic is blocked", async () => {
+    mocks.getToken.mockResolvedValue({ token: "t", model: "m" });
+    const session = fakeSession();
+    mocks.connect.mockResolvedValueOnce(session);
+    mocks.startMicRecorder.mockRejectedValueOnce(new DOMException("denied", "NotAllowedError"));
+    const h = handlers();
+    await createLiveCall(h).start();
+
+    expect(h.onInputMode).toHaveBeenLastCalledWith("text");
+    expect(mocks.connect).toHaveBeenCalled();
+    expect(sentTexts(session)[0]).toMatch(/will type/);
+    expect(h.onEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: "ERROR" }));
+  });
+
+  it("still fails on other mic errors", async () => {
+    mocks.getToken.mockResolvedValue({ token: "t", model: "m" });
+    mocks.startMicRecorder.mockRejectedValueOnce(new Error("worklet failed"));
+    const h = handlers();
+    await createLiveCall(h).start();
+    expect(h.onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "ERROR" }));
+  });
+
+  it("uses voice mode when the mic works", async () => {
+    const { h } = await startLiveCall();
+    expect(h.onInputMode).toHaveBeenLastCalledWith("voice");
+  });
+
+  it("sends a typed message as a labelled customer turn", async () => {
+    const { h, call, session } = await startLiveCall();
+    call.sendTyped("  Where is ORD-101?  ");
+    call.sendTyped("Thanks");
+
+    expect(sentTexts(session)[1]).toBe("Customer (typed): Where is ORD-101?");
+    const entries = h.onTranscript.mock.calls.at(-1)?.[0] as { role: string; text: string }[];
+    expect(entries.slice(-2)).toMatchObject([
+      { role: "customer", text: "Where is ORD-101?" },
+      { role: "customer", text: "Thanks" },
+    ]);
+    expect(h.onEvent).toHaveBeenCalledWith({ type: "USER_TRANSCRIPT" });
+  });
+
+  it("ignores blank messages and messages after the call ends", async () => {
+    const { call, session } = await startLiveCall();
+    call.sendTyped("   ");
+    call.end();
+    call.sendTyped("hello");
+    expect(sentTexts(session)).toHaveLength(1);
+  });
+
+  it("restarts the silence timer while the customer types", async () => {
+    const { call, session, onmessage } = await startLiveCall();
+    vi.useFakeTimers();
+    onmessage(agentDone);
+    vi.advanceTimersByTime(8_000);
+    call.noteTyping();
+    vi.advanceTimersByTime(9_999);
+    expect(sentTexts(session)).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(sentTexts(session)[1]).toMatch(/still there/);
   });
 });
 
