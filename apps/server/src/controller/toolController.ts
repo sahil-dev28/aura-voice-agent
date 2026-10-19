@@ -39,6 +39,19 @@ function toOrderView(order: Order, now: Date) {
   };
 }
 
+const formatIst = (date: Date) =>
+  `${date.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })} IST`;
+
+// The model reads ISO timestamps as local time ("12:30" for 6 PM IST), so the tool gives it IST text instead.
+function toToolOrderView(order: Order, now: Date) {
+  return {
+    ...toOrderView(order, now),
+    orderedAt: formatIst(order.orderedAt),
+    expectedBy: order.expectedBy ? formatIst(order.expectedBy) : undefined,
+    deliveredAt: order.deliveredAt ? formatIst(order.deliveredAt) : undefined,
+  };
+}
+
 function decide(order: Order, input: CheckOrderActionInput, now: Date): Decision {
   switch (input.action) {
     case "cancel":
@@ -69,7 +82,7 @@ export const getOrderDetails = async (req: Request, res: Response): Promise<void
       res.status(200).json({ data: order });
       return;
     }
-    res.status(200).json({ data: { found: true, order: toOrderView(order, now), cancel: canCancel(order) } });
+    res.status(200).json({ data: { found: true, order: toToolOrderView(order, now), cancel: canCancel(order) } });
     return;
   } catch (error) {
     res.status(500).json(formatUnknownError(error));

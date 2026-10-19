@@ -26,7 +26,13 @@ describe("POST /api/tools/get_order_details", () => {
       order: { orderId: "ORD-101", status: "OUT_FOR_DELIVERY", carrier: "BlueDart" },
       cancel: { eligible: false, reasonCode: "NOT_CANCELLABLE_IN_TRANSIT" },
     });
-    expect(typeof res.body.data.order.expectedBy).toBe("string");
+    expect(res.body.data.order.expectedBy).toMatch(/6:00[\s\u202f]?pm IST$/i);
+    expect(res.body.data.order.orderedAt).toMatch(/IST$/);
+  });
+
+  it("gives delivery dates in IST so the model doesn't read UTC as local time", async () => {
+    const res = await lookup({ order_id: "ORD-102" });
+    expect(res.body.data.order.deliveredAt).toMatch(/^\d{1,2} \w{3} \d{4}, .+ IST$/);
   });
 
   it("returns NOT_FOUND as data, not an HTTP error", async () => {
