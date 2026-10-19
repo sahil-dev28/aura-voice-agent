@@ -3,6 +3,7 @@ import express, { type Express } from "express";
 
 import { env } from "@aura/env/server";
 
+import { metricsRouter } from "@/routes/metricsRoutes";
 import { orderRouter } from "@/routes/orderRoutes";
 import { replacementRouter } from "@/routes/replacementRoutes";
 import { summaryRouter } from "@/routes/summaryRoutes";
@@ -24,6 +25,7 @@ app.use("/api/orders", orderRouter);
 app.use("/api/tools", toolRouter);
 app.use("/api/summary", summaryRouter);
 app.use("/api/replacements", replacementRouter);
+app.use("/api/metrics", metricsRouter);
 
 if (env.NODE_ENV !== "test" && !process.env.VERCEL) {
   app.listen(env.PORT, () => {

@@ -9,6 +9,7 @@ import {
 import { ApiError, callTool, getToken } from "@/lib/api";
 import { type AudioPlayer, createAudioPlayer } from "@/lib/audio/audio-player";
 import { type MicRecorder, startMicRecorder } from "@/lib/audio/mic-recorder";
+import { type CallMetrics, createMetrics } from "@/lib/live/metrics";
 import { type SessionEvent, initialSessionState, sessionReducer } from "@/lib/live/sessionReducer";
 import { describeToolEvent, filterCancelled, findEscalation } from "@/lib/live/toolEvents";
 import { addToolEntry, appendTranscript, closeTurn } from "@/lib/live/transcript";
@@ -18,7 +19,7 @@ export type LiveCallHandlers = {
   onEvent: (event: SessionEvent) => void;
   onTranscript: (entries: TranscriptEntry[]) => void;
   onToolEvents: (events: ToolEvent[]) => void;
-  onFinished: (call: { transcript: TranscriptEntry[]; toolEvents: ToolEvent[] }) => void;
+  onFinished: (call: { transcript: TranscriptEntry[]; toolEvents: ToolEvent[]; metrics: CallMetrics }) => void;
   onInputMode: (mode: "voice" | "text") => void;
 };
 
@@ -72,6 +73,8 @@ export function createLiveCall(handlers: LiveCallHandlers) {
   let resumes = 0;
   let muted = false;
   let busy = false;
+  let inputMode: CallMetrics["inputMode"] = "voice";
+  let metrics = createMetrics();
   let transcript: TranscriptEntry[] = [];
   let toolEvents: ToolEvent[] = [];
   const cancelled = new Set<string>();
@@ -98,8 +101,9 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     if (!active) return;
     active = false;
     teardown();
+    if (event.type === "ERROR") metrics.error(event.message);
     emit(event);
-    handlers.onFinished({ transcript, toolEvents });
+    handlers.onFinished({ transcript, toolEvents, metrics: metrics.finish(inputMode) });
   };
 
   const end = () => finish({ type: "END" });
@@ -172,12 +176,14 @@ export function createLiveCall(handlers: LiveCallHandlers) {
         // One ticket per call: a repeat escalation gets the ticket already opened.
         const existing = name === "escalate_to_human" ? findEscalation(toolEvents) : undefined;
         let result: Record<string, unknown>;
+        const startedAt = Date.now();
         try {
           result = (existing ?? (await callTool(name, args, AbortSignal.timeout(TOOL_TIMEOUT_MS)))) as Record<string, unknown>;
         } catch (error) {
           result = { error: error instanceof ApiError && error.status < 500 ? error.message : "LOOKUP_UNAVAILABLE" };
         }
         const ts = Date.now();
+        metrics.toolDone(name, ts - startedAt, !("error" in result));
         toolEvents = [...toolEvents, { id: call.id ?? `${name}-${ts}`, name, args, result, ts }];
         handlers.onToolEvents(toolEvents);
         setTranscript(addToolEntry(transcript, describeToolEvent(name, args, result), ts));
@@ -193,6 +199,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     if (content) {
       if (content.interrupted) {
         player?.flush();
+        metrics.interrupted();
         setTranscript(closeTurn(transcript));
         emit({ type: "INTERRUPTED" });
       }
@@ -209,6 +216,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
         const data = part.inlineData?.data;
         if (data && part.inlineData?.mimeType?.startsWith("audio/")) {
           player?.enqueue(data);
+          metrics.agentAudio();
           emit({ type: "AUDIO_CHUNK" });
         }
       }
@@ -273,7 +281,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     resuming = true;
     resumes += 1;
     try {
-      await connect(run, resumeHandle);
+      if (await connect(run, resumeHandle)) metrics.reconnected();
     } catch {
       if (run === runId) fail("The call was disconnected.");
     } finally {
@@ -294,6 +302,8 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     resumes = 0;
     muted = false;
     busy = false;
+    metrics = createMetrics();
+    metrics.started();
     transcript = [];
     toolEvents = [];
     cancelled.clear();
@@ -312,7 +322,11 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       try {
         runMic = await startMicRecorder((data, level) => {
           if (run !== runId || muted) return;
-          if (level >= SPEECH_LEVEL) heardCustomer();
+          if (level >= SPEECH_LEVEL) {
+            heardCustomer();
+            // Sound while Aria is talking is mostly echo, so it doesn't start a reply timer.
+            if (callState.status !== "speaking") metrics.customerSpoke();
+          }
           session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } });
         });
       } catch (error) {
@@ -320,8 +334,10 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       }
       if (stale()) return runMic?.stop();
       mic = runMic;
-      handlers.onInputMode(mic ? "voice" : "text");
+      inputMode = mic ? "voice" : "text";
+      handlers.onInputMode(inputMode);
       if (!(await connect(run))) return;
+      metrics.opened();
       emit({ type: "OPEN" });
       wrapUpTimer = setTimeout(() => sendText(WRAP_UP), CALL_LIMIT_MS - WRAP_UP_BEFORE_MS);
       limitTimer = setTimeout(end, CALL_LIMIT_MS);
@@ -351,6 +367,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
   const sendTyped = (raw: string) => {
     const text = raw.trim();
     if (!active || !session || !text) return;
+    metrics.customerSpoke();
     setTranscript(closeTurn(appendTranscript(closeTurn(transcript), "customer", text, Date.now())));
     emit({ type: "USER_TRANSCRIPT" });
     emit({ type: "USER_PAUSE" });

@@ -384,6 +384,53 @@ describe("typing", () => {
   });
 });
 
+describe("call metrics", () => {
+  const audioChunk = { serverContent: { modelTurn: { parts: [{ inlineData: { data: "AAAA", mimeType: "audio/pcm;rate=24000" } }] } } };
+  const finished = (h: ReturnType<typeof handlers>) => h.onFinished.mock.calls.at(-1)?.[0].metrics;
+
+  it("reports connect time, reply latency and tool calls when the call ends", async () => {
+    mocks.callTool.mockResolvedValueOnce({ found: true });
+    const { h, call, onmessage } = await startLiveCall();
+    call.sendTyped("Where is ORD-101?");
+    onmessage(audioChunk);
+    onmessage({ toolCall: { functionCalls: [{ id: "t1", name: "get_order_details", args: { order_id: "ORD-101" } }] } });
+    await flush();
+    call.end();
+
+    const metrics = finished(h);
+    expect(metrics).toMatchObject({ inputMode: "voice", interruptions: 0, reconnects: 0, errors: [] });
+    expect(metrics.connectMs).toEqual(expect.any(Number));
+    expect(metrics.turnLatenciesMs).toHaveLength(1);
+    expect(metrics.toolCalls).toEqual([{ name: "get_order_details", ms: expect.any(Number), ok: true }]);
+  });
+
+  it("marks failed tool calls", async () => {
+    mocks.callTool.mockRejectedValueOnce(new Error("down"));
+    const { h, call, onmessage } = await startLiveCall();
+    onmessage({ toolCall: { functionCalls: [{ id: "t1", name: "get_order_details", args: {} }] } });
+    await flush();
+    call.end();
+    expect(finished(h).toolCalls[0]).toMatchObject({ ok: false });
+  });
+
+  it("counts interruptions and reconnects", async () => {
+    const { h, call, onmessage, onclose } = await startLiveCall();
+    mocks.connect.mockResolvedValueOnce(fakeSession());
+    onmessage({ serverContent: { interrupted: true } });
+    onmessage({ sessionResumptionUpdate: { newHandle: "h1", resumable: true } });
+    onclose({ reason: "network" });
+    await flush();
+    call.end();
+    expect(finished(h)).toMatchObject({ interruptions: 1, reconnects: 1 });
+  });
+
+  it("records the error that ended the call", async () => {
+    const { h, onclose } = await startLiveCall();
+    onclose({ reason: "network" });
+    expect(finished(h).errors).toEqual(["Call disconnected: network"]);
+  });
+});
+
 describe("call length limit", () => {
   it("asks Aria to wrap up a minute before the limit, then ends the call", async () => {
     vi.useFakeTimers();

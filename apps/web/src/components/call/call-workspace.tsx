@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aura/ui/components/card";
 
 import { CallControls } from "@/components/call/call-controls";
+import { CallMetricsCard } from "@/components/call/call-metrics";
 import { CallSummary } from "@/components/call/call-summary";
 import { LiveTranscript } from "@/components/call/live-transcript";
 import { MessageBox } from "@/components/call/message-box";
@@ -24,6 +25,7 @@ export function CallWorkspace() {
     summary,
     muted,
     inputMode,
+    metrics,
     start,
     end,
     toggleMute,
@@ -82,6 +84,7 @@ export function CallWorkspace() {
           />
         )}
         <CallSummary summary={summary} onRetry={retrySummary} />
+        {metrics && <CallMetricsCard metrics={metrics} />}
       </div>
       <TestOrdersCard />
     </div>

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
-import { getSummary } from "@/lib/api";
+import { getSummary, sendMetrics } from "@/lib/api";
 import { createLiveCall } from "@/lib/live/live-call";
+import type { CallMetrics } from "@/lib/live/metrics";
 import { initialSessionState, sessionReducer } from "@/lib/live/sessionReducer";
 import { hasCustomerSpeech, toSummaryTranscript } from "@/lib/live/transcript";
 import type { SummaryState, ToolEvent, TranscriptEntry } from "@/lib/types";
@@ -34,6 +35,7 @@ export function useLiveSession() {
   const [summary, setSummary] = useState<SummaryState>({ status: "idle" });
   const [muted, setMuted] = useState(false);
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
+  const [metrics, setMetrics] = useState<CallMetrics | null>(null);
   const lastCall = useRef<FinishedCall | null>(null);
 
   const [call] = useState(() =>
@@ -45,6 +47,9 @@ export function useLiveSession() {
       onFinished: (finished) => {
         lastCall.current = finished;
         setMuted(false);
+        setMetrics(finished.metrics);
+        // Telemetry is best effort: a failed send must never affect the call or the summary.
+        sendMetrics(finished.metrics).catch(() => {});
         void requestSummary(finished, setSummary);
       },
     }),
@@ -55,6 +60,7 @@ export function useLiveSession() {
   const start = useCallback(() => {
     setSummary({ status: "idle" });
     setMuted(false);
+    setMetrics(null);
     void call.start();
   }, [call]);
 
@@ -74,6 +80,7 @@ export function useLiveSession() {
     summary,
     muted,
     inputMode,
+    metrics,
     start,
     end: call.end,
     toggleMute,

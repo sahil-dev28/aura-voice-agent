@@ -1,5 +1,6 @@
 import { env } from "@aura/env/web";
 
+import type { CallMetrics } from "@/lib/live/metrics";
 import type { CallOutcome, OrderView, PhotoUpload, TokenResponse } from "@/lib/types";
 
 export class ApiError extends Error {
@@ -40,3 +41,6 @@ export const uploadReplacementPhoto = (referenceId: string, photo: { mime_type: 
     method: "POST",
     body: JSON.stringify(photo),
   });
+
+export const sendMetrics = (metrics: CallMetrics) =>
+  request<{ received: boolean }>("/api/metrics", { method: "POST", body: JSON.stringify(metrics) });
