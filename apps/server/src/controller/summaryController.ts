@@ -30,10 +30,14 @@ ${JSON.stringify(toolEvents)}`;
 
 const ATTEMPTS_PER_MODEL = 2;
 const RETRY_DELAY_MS = 300;
+// A Gemini request can occasionally hang; without a limit the customer would wait on "Generating summary" forever.
+const ATTEMPT_TIMEOUT_MS = 20_000;
 
 // Free-tier keys have a small daily quota per model, so a used-up model is skipped rather than retried.
 const isQuotaError = (error: unknown) =>
   (error as { status?: number })?.status === 429 || /RESOURCE_EXHAUSTED/.test(String(error));
+
+const isTimeout = (error: unknown) => (error as { name?: string })?.name === "TimeoutError";
 
 async function generateOutcome(input: SummaryRequestInput, model: string): Promise<CallOutcome> {
   const response = await getGenAI().models.generateContent({
@@ -43,6 +47,7 @@ async function generateOutcome(input: SummaryRequestInput, model: string): Promi
       responseMimeType: "application/json",
       responseJsonSchema: z.toJSONSchema(callOutcomeSchema),
       temperature: 0.2,
+      abortSignal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
     },
   });
   const parsed = callOutcomeSchema.safeParse(JSON.parse(response.text ?? ""));
@@ -54,7 +59,7 @@ export const createSummary = async (req: Request, res: Response): Promise<void> 
   const input = req.body as SummaryRequestInput;
   const models = [...new Set([env.GEMINI_SUMMARY_MODEL, env.GEMINI_SUMMARY_FALLBACK_MODEL])];
   let quotaOnly = true;
-  // An overloaded model or an off-schema answer usually works on a second try; a used-up quota never does.
+  // An overloaded model or an off-schema answer usually works on a second try; a used-up quota or a hang won't.
   for (const model of models) {
     for (let attempt = 1; attempt <= ATTEMPTS_PER_MODEL; attempt++) {
       try {
@@ -64,6 +69,7 @@ export const createSummary = async (req: Request, res: Response): Promise<void> 
         console.error(`Summary with ${model}, attempt ${attempt}, failed:`, error);
         if (isQuotaError(error)) break;
         quotaOnly = false;
+        if (isTimeout(error)) break;
         if (attempt < ATTEMPTS_PER_MODEL) await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
       }
     }

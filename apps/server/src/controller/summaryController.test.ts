@@ -46,6 +46,7 @@ describe("POST /api/summary", () => {
     const args = generateContent.mock.calls[0]?.[0];
     expect(args.config.responseMimeType).toBe("application/json");
     expect(args.config.responseJsonSchema).toBeTruthy();
+    expect(args.config.abortSignal).toBeInstanceOf(AbortSignal);
     expect(args.contents).toContain("Customer: Where is my order ORD-101?");
     expect(args.contents).toContain("escalate_to_human");
   });
@@ -107,6 +108,18 @@ describe("POST /api/summary", () => {
     expect(res.status).toBe(200);
     const models = generateContent.mock.calls.map(([args]) => args.model);
     expect(models).toEqual(["main-model", "fallback-model"]);
+  });
+
+  it("moves to the fallback model when an attempt times out", async () => {
+    generateContent
+      .mockImplementationOnce(async () => {
+        throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+      })
+      .mockResolvedValueOnce({ text: JSON.stringify(outcome) });
+    const res = await request(app).post("/api/summary").set("X-Forwarded-For", "10.1.0.4").send(body);
+
+    expect(res.status).toBe(200);
+    expect(generateContent.mock.calls.map(([args]) => args.model)).toEqual(["main-model", "fallback-model"]);
   });
 
   it("says the quota is used up when every model is out of quota", async () => {

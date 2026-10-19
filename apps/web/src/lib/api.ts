@@ -33,8 +33,15 @@ export const getOrders = () => request<OrderView[]>("/api/orders");
 export const callTool = (name: string, args: Record<string, unknown>, signal?: AbortSignal) =>
   request<unknown>(`/api/tools/${encodeURIComponent(name)}`, { method: "POST", body: JSON.stringify(args), signal });
 
+// The server tries two models with a 20 s limit each, so the browser gives up a little after that.
+const SUMMARY_TIMEOUT_MS = 60_000;
+
 export const getSummary = (body: { transcript: { role: string; text: string; ts: number }[]; toolEvents: unknown[] }) =>
-  request<CallOutcome>("/api/summary", { method: "POST", body: JSON.stringify(body) });
+  request<CallOutcome>("/api/summary", {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(SUMMARY_TIMEOUT_MS),
+  });
 
 export const uploadReplacementPhoto = (referenceId: string, photo: { mime_type: string; data: string }) =>
   request<PhotoUpload>(`/api/replacements/${encodeURIComponent(referenceId)}/photos`, {

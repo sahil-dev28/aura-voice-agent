@@ -61,7 +61,7 @@ export function CallSummary({ summary, onRetry }: Props) {
               {summary.outcome.order_id && <Badge variant="secondary">{summary.outcome.order_id}</Badge>}
             </div>
             <p className="text-sm">{summary.outcome.call_summary}</p>
-            <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs">{json}</pre>
+            <pre className="whitespace-pre-wrap break-words rounded-lg bg-muted p-3 font-mono text-xs">{json}</pre>
           </div>
         )}
       </CardContent>

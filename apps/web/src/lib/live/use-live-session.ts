@@ -24,7 +24,13 @@ async function requestSummary(call: FinishedCall, setSummary: (state: SummarySta
     });
     setSummary({ status: "ready", outcome });
   } catch (error) {
-    setSummary({ status: "error", message: error instanceof Error ? error.message : "Could not generate summary" });
+    const message =
+      error instanceof DOMException && error.name === "TimeoutError"
+        ? "The summary is taking too long. Try again."
+        : error instanceof Error
+          ? error.message
+          : "Could not generate summary";
+    setSummary({ status: "error", message });
   }
 }
 

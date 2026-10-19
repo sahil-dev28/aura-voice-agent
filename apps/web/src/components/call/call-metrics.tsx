@@ -2,7 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aura
 
 import { type CallMetrics, percentile } from "@/lib/live/metrics";
 
-const seconds = (ms: number | null) => (ms === null ? "–" : `${(ms / 1000).toFixed(1)} s`);
+// Under a second reads better in milliseconds: a 40 ms tool call would otherwise show as "0.0 s".
+const seconds = (ms: number | null) => (ms === null ? "–" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 const spread = (values: number[], extra = "") =>
   values.length === 0
