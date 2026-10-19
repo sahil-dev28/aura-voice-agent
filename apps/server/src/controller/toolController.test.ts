@@ -5,6 +5,7 @@ import { app } from "@/app";
 
 const lookup = (body: object) => request(app).post("/api/tools/get_order_details").send(body);
 const action = (body: object) => request(app).post("/api/tools/check_order_action").send(body);
+const confirm = (body: object) => request(app).post("/api/tools/confirm_order_action").send(body);
 
 describe("GET /api/orders", () => {
   it("lists the three orders with derived fields", async () => {
@@ -52,11 +53,12 @@ describe("POST /api/tools/get_order_details", () => {
 });
 
 describe("POST /api/tools/check_order_action", () => {
-  it("cancels ORD-103 with a CXL reference", async () => {
+  it("says ORD-103 can be cancelled without recording it", async () => {
     const res = await action({ order_id: "ORD-103", action: "cancel" });
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ found: true, orderId: "ORD-103", action: "cancel", eligible: true });
-    expect(res.body.data.referenceId).toMatch(/^CXL-[0-9A-F]{4}$/);
+    expect(res.body.data.referenceId).toBeUndefined();
+    expect(res.body.data.nextStep).toMatch(/confirm/i);
   });
 
   it("refuses ORD-102 return without a reference", async () => {
@@ -82,6 +84,45 @@ describe("POST /api/tools/check_order_action", () => {
 
   it("rejects an unknown action with 400", async () => {
     const res = await action({ order_id: "ORD-103", action: "refund" });
+    expect(res.status).toBe(400);
+    expect(res.body.fieldErrors).toHaveProperty("action");
+  });
+});
+
+describe("POST /api/tools/confirm_order_action", () => {
+  it("records the ORD-103 cancellation with a CXL reference", async () => {
+    const res = await confirm({ order_id: "ORD-103", action: "cancel" });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ found: true, orderId: "ORD-103", action: "cancel", eligible: true, confirmed: true });
+    expect(res.body.data.referenceId).toMatch(/^CXL-[0-9A-F]{4}$/);
+    expect(res.body.data.nextStep).toMatch(/recorded/i);
+  });
+
+  it("returns the same reference when confirmed twice", async () => {
+    const first = await confirm({ order_id: "ORD-103", action: "cancel" });
+    const second = await confirm({ order_id: "order one zero three", action: "cancel" });
+    expect(second.body.data.referenceId).toBe(first.body.data.referenceId);
+  });
+
+  it("re-checks policy and refuses ORD-101 cancellation", async () => {
+    const res = await confirm({ order_id: "ORD-101", action: "cancel" });
+    expect(res.body.data).toMatchObject({ eligible: false, confirmed: false, reasonCode: "NOT_CANCELLABLE_IN_TRANSIT" });
+    expect(res.body.data.referenceId).toBeUndefined();
+  });
+
+  it("does not record a return before the customer says whether it was opened", async () => {
+    const res = await confirm({ order_id: "ORD-102", action: "return" });
+    expect(res.body.data).toMatchObject({ confirmed: false });
+    expect(res.body.data.referenceId).toBeUndefined();
+  });
+
+  it("returns not found for unknown ids", async () => {
+    const res = await confirm({ order_id: "ORD-555", action: "cancel" });
+    expect(res.body.data).toEqual({ found: false, reason: "NOT_FOUND", heard: "ORD-555" });
+  });
+
+  it("rejects an unknown action with 400", async () => {
+    const res = await confirm({ order_id: "ORD-103", action: "refund" });
     expect(res.status).toBe(400);
     expect(res.body.fieldErrors).toHaveProperty("action");
   });

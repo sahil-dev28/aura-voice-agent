@@ -27,9 +27,26 @@ describe("describeToolEvent", () => {
       describeToolEvent(
         "check_order_action",
         { order_id: "ORD-103", action: "cancel" },
-        { found: true, orderId: "ORD-103", action: "cancel", eligible: true, reasonCode: "CANCELLABLE", referenceId: "CXL-1A2B" },
+        { found: true, orderId: "ORD-103", action: "cancel", eligible: true, reasonCode: "CANCELLABLE" },
       ),
-    ).toBe("Checked cancel for ORD-103: eligible, ref CXL-1A2B");
+    ).toBe("Checked cancel for ORD-103: eligible");
+  });
+
+  it("describes a confirmed action", () => {
+    expect(
+      describeToolEvent(
+        "confirm_order_action",
+        { order_id: "ORD-103", action: "cancel" },
+        { found: true, orderId: "ORD-103", action: "cancel", eligible: true, confirmed: true, referenceId: "CXL-1A2B" },
+      ),
+    ).toBe("Recorded cancel for ORD-103: ref CXL-1A2B");
+    expect(
+      describeToolEvent(
+        "confirm_order_action",
+        { order_id: "ORD-101", action: "cancel" },
+        { found: true, orderId: "ORD-101", action: "cancel", eligible: false, confirmed: false, reasonCode: "NOT_CANCELLABLE_IN_TRANSIT" },
+      ),
+    ).toBe("Could not record cancel for ORD-101: not eligible (NOT_CANCELLABLE_IN_TRANSIT)");
   });
 
   it("describes failures", () => {

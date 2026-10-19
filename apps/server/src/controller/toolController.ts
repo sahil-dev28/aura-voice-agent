@@ -1,7 +1,7 @@
-import { randomBytes } from "node:crypto";
 import type { Request, Response } from "express";
 
 import { type Order, getOrder, listOrders } from "@/data/orders";
+import { recordRequest } from "@/data/requests";
 import type { CheckOrderActionInput, GetOrderDetailsInput, OrderAction } from "@/schema/tool";
 import { formatUnknownError } from "@/utils/formatUnknownError";
 import { normalizeOrderId } from "@/utils/orderId";
@@ -17,7 +17,11 @@ import {
 
 type NotFound = { found: false; reason: "INVALID_FORMAT" | "NOT_FOUND"; heard: string };
 
-const REFERENCE_PREFIX: Record<OrderAction, string> = { cancel: "CXL", return: "RET", damage_replacement: "RPL" };
+const RECORDED_NEXT_STEP: Record<OrderAction, string> = {
+  cancel: "The cancellation request has been recorded.",
+  return: "The return request has been recorded. Keep the product unused in its original packaging.",
+  damage_replacement: "The replacement request has been recorded. The customer needs to share photos of the damage.",
+};
 
 function findOrder(raw: string, now: Date): Order | NotFound {
   const normalized = normalizeOrderId(raw);
@@ -81,10 +85,32 @@ export const checkOrderAction = async (req: Request, res: Response): Promise<voi
       return;
     }
     const decision = decide(order, input, now);
-    const referenceId = decision.eligible
-      ? `${REFERENCE_PREFIX[input.action]}-${randomBytes(2).toString("hex").toUpperCase()}`
-      : undefined;
-    res.status(200).json({ data: { found: true, orderId: order.orderId, action: input.action, ...decision, referenceId } });
+    res.status(200).json({ data: { found: true, orderId: order.orderId, action: input.action, ...decision } });
+    return;
+  } catch (error) {
+    res.status(500).json(formatUnknownError(error));
+  }
+};
+
+export const confirmOrderAction = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const input = req.body as CheckOrderActionInput;
+    const now = new Date();
+    const order = findOrder(input.order_id, now);
+    if ("found" in order) {
+      res.status(200).json({ data: order });
+      return;
+    }
+    const decision = decide(order, input, now);
+    const base = { found: true, orderId: order.orderId, action: input.action };
+    if (!decision.eligible) {
+      res.status(200).json({ data: { ...base, ...decision, confirmed: false } });
+      return;
+    }
+    const referenceId = recordRequest(order.orderId, input.action);
+    res.status(200).json({
+      data: { ...base, ...decision, nextStep: RECORDED_NEXT_STEP[input.action], confirmed: true, referenceId },
+    });
     return;
   } catch (error) {
     res.status(500).json(formatUnknownError(error));

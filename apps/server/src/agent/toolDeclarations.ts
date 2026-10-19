@@ -2,7 +2,7 @@ import { Behavior, type FunctionDeclaration, Type } from "@google/genai";
 
 import { orderActions } from "@/schema/tool";
 
-export const toolNames = ["get_order_details", "check_order_action"] as const;
+export const toolNames = ["get_order_details", "check_order_action", "confirm_order_action"] as const;
 export type ToolName = (typeof toolNames)[number];
 
 export const toolDeclarations: FunctionDeclaration[] = [
@@ -26,7 +26,7 @@ export const toolDeclarations: FunctionDeclaration[] = [
     name: "check_order_action",
     behavior: Behavior.BLOCKING,
     description:
-      "Check whether a cancellation, return or damaged-product replacement is allowed for an order under Aura policy, and record the request if it is. Call this before telling the customer whether they can do any of these.",
+      "Check whether a cancellation, return or damaged-product replacement is allowed for an order under Aura policy. This only checks and does not record anything. Call this before telling the customer whether they can do any of these.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -35,6 +35,24 @@ export const toolDeclarations: FunctionDeclaration[] = [
         product_opened: {
           type: Type.BOOLEAN,
           description: "For returns only: whether the customer said the product has been opened or used. Omit if unknown.",
+        },
+      },
+      required: ["order_id", "action"],
+    },
+  },
+  {
+    name: "confirm_order_action",
+    behavior: Behavior.BLOCKING,
+    description:
+      "Record a cancellation, return or damaged-product replacement and get its reference ID. Call this only after check_order_action returned eligible true and the customer has clearly said yes to going ahead.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        order_id: { type: Type.STRING, description: "The order ID, for example ORD-103." },
+        action: { type: Type.STRING, enum: [...orderActions], description: "The action the customer confirmed." },
+        product_opened: {
+          type: Type.BOOLEAN,
+          description: "For returns only: whether the customer said the product has been opened or used.",
         },
       },
       required: ["order_id", "action"],

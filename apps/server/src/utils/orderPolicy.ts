@@ -28,7 +28,7 @@ export function canCancel(order: Order): Decision {
         eligible: true,
         reasonCode: "CANCELLABLE",
         explanation: `Order ${order.orderId} is still processing, so it can be cancelled.`,
-        nextStep: "The cancellation request has been recorded.",
+        nextStep: "Ask the customer to confirm they want to cancel it.",
       };
     case "SHIPPED":
     case "OUT_FOR_DELIVERY":
@@ -82,7 +82,7 @@ export function canReturn(order: Order, facts: { productOpened?: boolean }, now:
     eligible: true,
     reasonCode: "RETURNABLE",
     explanation: `Order ${order.orderId} was delivered ${days} days ago and is unopened, so it is within the 7-day return policy.`,
-    nextStep: "The return request has been recorded. Keep the product unused in its original packaging.",
+    nextStep: "Ask the customer to confirm they want to return it.",
   };
 }
 
@@ -102,6 +102,6 @@ export function canReplaceDamaged(order: Order, now: Date): Decision {
     eligible: true,
     reasonCode: "REPLACEMENT_ELIGIBLE",
     explanation: "This is within 48 hours of delivery, so a damaged or defective product can be replaced.",
-    nextStep: "The replacement request has been recorded. The customer needs to share photos of the damage.",
+    nextStep: "Ask the customer to confirm they want a replacement. They will need to share photos of the damage.",
   };
 }

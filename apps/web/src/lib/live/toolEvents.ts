@@ -1,5 +1,11 @@
 type LookupResult = { found?: boolean; order?: { orderId?: string; status?: string }; heard?: string; error?: string };
-type ActionResult = LookupResult & { orderId?: string; eligible?: boolean; reasonCode?: string; referenceId?: string };
+type ActionResult = LookupResult & {
+  orderId?: string;
+  eligible?: boolean;
+  reasonCode?: string;
+  confirmed?: boolean;
+  referenceId?: string;
+};
 
 const humanStatus = (status = "") => status.toLowerCase().replaceAll("_", " ");
 
@@ -9,10 +15,13 @@ export function describeToolEvent(name: string, args: Record<string, unknown>, r
   if (r.found === false) return `No order found for "${r.heard ?? String(args.order_id ?? "")}"`;
   if (name === "get_order_details") return `Looked up ${r.order?.orderId}: ${humanStatus(r.order?.status)}`;
   if (name === "check_order_action") {
-    const verdict = r.eligible
-      ? `eligible${r.referenceId ? `, ref ${r.referenceId}` : ""}`
-      : `not eligible (${r.reasonCode})`;
+    const verdict = r.eligible ? "eligible" : `not eligible (${r.reasonCode})`;
     return `Checked ${String(args.action)} for ${r.orderId}: ${verdict}`;
+  }
+  if (name === "confirm_order_action") {
+    return r.confirmed
+      ? `Recorded ${String(args.action)} for ${r.orderId}: ref ${r.referenceId}`
+      : `Could not record ${String(args.action)} for ${r.orderId}: not eligible (${r.reasonCode})`;
   }
   return `Called ${name}`;
 }
