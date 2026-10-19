@@ -36,6 +36,8 @@ End Call ── POST /api/summary ───────────► Gemini Fl
 
 **Models:** `gemini-3.8-live` for the call and `gemini-3-flash-preview` for the summary. Both are set by environment variables, so they can be switched without a code change.
 
+**Voice:** the brief prefers an Indian voice. Gemini Live's prebuilt voices aren't India-specific, so the system prompt asks Aria to speak natural Indian English (and Hindi or Hinglish when the customer does). I chose this over a modular pipeline with an Indian TTS voice because the latency and built-in barge-in matter more for a support call. The voice is set by `GEMINI_VOICE`, and if a guaranteed Indian voice became a hard requirement, I'd switch to the modular pipeline with an Indian TTS voice such as Sarvam.
+
 ## How the voice pipeline works
 
 1. **Capture**: `getUserMedia` with echo cancellation and noise suppression. An AudioWorklet forwards raw frames, which are downsampled to 16 kHz, converted to 16-bit PCM and sent every ~40 ms.
@@ -122,13 +124,40 @@ The voice flow itself is checked by hand against a list of test conversations: t
 ## How I think about it
 
 ### 1. Why this architecture and stack?
-<owner to write>
+
+The thing that makes or breaks a voice agent is latency, so I started there. A speech-to-speech model (Gemini Live) skips the STT → LLM → TTS hops and gives me voice activity detection and barge-in for free, which would otherwise be the hardest parts to build. Letting the browser talk to Gemini directly means the server never touches audio, so it can stay a small stateless HTTP API on a serverless host.
+
+The second rule was that the model talks but never decides. Anything that has to be right (order data, cancel / return / damage eligibility, the system prompt itself) lives on the server as plain TypeScript, and the ephemeral token locks the session config so it can't be changed from the browser. That splits the system into a part I can unit-test exactly (policy, ID parsing, endpoints) and a part I can only check by talking to it (the conversation).
+
+The stack is the one I'm fastest and most careful in: a Turborepo monorepo with a Next.js web app, an Express API, shared `env` / `config` / `ui` packages, Zod at every edge and Vitest + Supertest for tests. Nothing in it is unusual, which was the point. The interesting part of this project is the voice loop, not the plumbing.
 
 ### 2. Most difficult part and how I solved it
-<owner to write>
+
+Making Aria trustworthy with real order data. A live model is fluent and confident, which is exactly the problem: early on it would happily say an order "should arrive tomorrow" or "can be returned" without looking anything up, and it misheard IDs like "order one oh three" in many different ways.
+
+I fixed it in layers instead of relying on one big prompt:
+- **Decisions moved into code.** `check_order_action` returns `allowed`, a reason code and an explanation from `orderPolicy.ts`. Aria only relays the result, so pushing back doesn't change the answer.
+- **Blocking tools and hard prompt rules.** Tools are declared as blocking so Aria waits for the result instead of talking over it, and the prompt forbids stating order facts or promising actions without a tool result from this call.
+- **Server-side ID normalisation.** "one oh one", "one hundred and three", "double one" and "ORD 101" all resolve to `ORD-101`. Anything that doesn't parse, or isn't found, comes back as a normal result, so Aria reads the ID back and asks the customer to check it instead of guessing.
+
+The other hard part was the call lifecycle. Audio, the WebSocket, tool calls and timers all run asynchronously, so ending a call and quickly starting a new one could let late messages from the old session leak into the new one. Every call now gets a run ID; callbacks from a stale run are ignored, cancelled tool calls are dropped, and Gemini's `goAway` notice is honoured using its `timeLeft` so the call ends cleanly instead of being cut off.
 
 ### 3. One more week: what first and why?
-<owner to write>
+
+**An automated conversation test suite.** Right now the policy and plumbing are well covered by unit tests, but the conversation itself (does Aria call the tool, read back the ID, refuse politely, switch to Hinglish) is checked by hand. That is the riskiest part and the one most likely to regress whenever I change the prompt, the tools or the model version. I'd script the test conversations (tracking, refused return, allowed cancellation, missing and unknown IDs, off-topic, barge-in, Hinglish), play them in as synthesised audio, and score the transcript and tool calls automatically against expected outcomes. Every later change becomes safer once that exists.
+
+After that, in order:
+1. **Customer verification** (phone or email match) before sharing order details.
+2. **Latency and error telemetry**: time to first audio, tool round-trip, interruptions and disconnects per call, so tuning is based on numbers.
+3. **Human handoff**: a tool that escalates to a person with the summary attached when Aria can't help or the customer asks.
 
 ### 4. At 1,000 conversations a day, what changes?
-<owner to write>
+
+1,000 calls a day is only around 10 to 30 calls at the same time at peak, so the architecture holds: audio already goes browser → Gemini directly and the API is stateless. What changes is everything around it:
+- **Quotas and cost.** Move to a paid Gemini tier with enough concurrent Live sessions, set a maximum call length and idle timeout, and track cost per call.
+- **Shared state.** The in-memory rate limiter only works per serverless instance, so it moves to Redis (or the platform's edge rate limiting). Rate limits should also be per verified customer, not just per IP.
+- **Real data.** The mock order list becomes the real order and returns system, with timeouts, retries and caching, and allowed actions actually create the cancellation or return.
+- **Storage and privacy.** Save transcripts, tool calls and summaries to a database for QA, analytics and disputes, with a retention policy and PII redaction.
+- **Async summaries.** Generate the summary in a background job with retries, so a slow model call never blocks the end of a call.
+- **Monitoring and QA.** Dashboards and alerts for latency, tool failures, disconnects and escalation rate, plus sampled transcripts reviewed regularly and the automated conversation suite running on every prompt or model change.
+- **Fallbacks.** A clear "we're having trouble, please try again or chat with us" path when Gemini Live is degraded, instead of a silent failure.
