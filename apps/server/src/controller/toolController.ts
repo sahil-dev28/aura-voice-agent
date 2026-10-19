@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 
 import { type Order, getOrder, listOrders } from "@/data/orders";
-import { openTicket, recordRequest } from "@/data/requests";
+import { MAX_PHOTOS, getRequest, openTicket, recordRequest } from "@/data/requests";
 import type { CheckOrderActionInput, EscalateToHumanInput, GetOrderDetailsInput, OrderAction } from "@/schema/tool";
 import { formatUnknownError } from "@/utils/formatUnknownError";
 import { normalizeOrderId } from "@/utils/orderId";
@@ -20,7 +20,8 @@ type NotFound = { found: false; reason: "INVALID_FORMAT" | "NOT_FOUND"; heard: s
 const RECORDED_NEXT_STEP: Record<OrderAction, string> = {
   cancel: "The cancellation request has been recorded.",
   return: "The return request has been recorded. Keep the product unused in its original packaging.",
-  damage_replacement: "The replacement request has been recorded. The customer needs to share photos of the damage.",
+  damage_replacement:
+    "The replacement request has been recorded. Ask the customer to upload photos of the damage in the upload box that is now on their screen.",
 };
 
 function findOrder(raw: string, now: Date): Order | NotFound {
@@ -108,8 +109,12 @@ export const confirmOrderAction = async (req: Request, res: Response): Promise<v
       return;
     }
     const referenceId = recordRequest(order.orderId, input.action);
+    const photoUpload =
+      input.action === "damage_replacement"
+        ? { maxPhotos: MAX_PHOTOS, photoCount: getRequest(referenceId)?.photos.length ?? 0 }
+        : undefined;
     res.status(200).json({
-      data: { ...base, ...decision, nextStep: RECORDED_NEXT_STEP[input.action], confirmed: true, referenceId },
+      data: { ...base, ...decision, nextStep: RECORDED_NEXT_STEP[input.action], confirmed: true, referenceId, photoUpload },
     });
     return;
   } catch (error) {

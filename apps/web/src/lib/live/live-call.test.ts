@@ -287,6 +287,40 @@ describe("mute", () => {
   });
 });
 
+describe("photo uploads", () => {
+  it("tells Aria and records the upload while the call is live", async () => {
+    const { h, call, session } = await startLiveCall();
+    call.notePhotos({ referenceId: "RPL-1A2B", photoCount: 2, maxPhotos: 3 });
+
+    expect(sentTexts(session)[1]).toMatch(/^Call system:.*2 photos.*RPL-1A2B/);
+    const events = h.onToolEvents.mock.calls.at(-1)?.[0] as { name: string }[];
+    expect(events.at(-1)?.name).toBe("photo_upload");
+    const entries = h.onTranscript.mock.calls.at(-1)?.[0] as { text: string }[];
+    expect(entries.at(-1)?.text).toBe("Photos received for RPL-1A2B: 2 of 3");
+  });
+
+  it("pauses the silence check-in while the customer is choosing photos", async () => {
+    const { call, session, onmessage } = await startLiveCall();
+    vi.useFakeTimers();
+    onmessage(agentDone);
+
+    call.setBusy(true);
+    vi.advanceTimersByTime(30_000);
+    expect(sentTexts(session)).toHaveLength(1);
+
+    call.setBusy(false);
+    vi.advanceTimersByTime(10_000);
+    expect(sentTexts(session)[1]).toMatch(/still there/);
+  });
+
+  it("does nothing once the call has ended", async () => {
+    const { call, session } = await startLiveCall();
+    call.end();
+    call.notePhotos({ referenceId: "RPL-1A2B", photoCount: 1, maxPhotos: 3 });
+    expect(sentTexts(session)).toHaveLength(1);
+  });
+});
+
 describe("call length limit", () => {
   it("asks Aria to wrap up a minute before the limit, then ends the call", async () => {
     vi.useFakeTimers();

@@ -35,6 +35,14 @@ const FALLBACK: OrderRow[] = [
     status: "PROCESSING",
     note: "Ordered 3 hours ago · can be cancelled",
   },
+  {
+    orderId: "ORD-104",
+    customerName: "Karan Mehta",
+    product: "Niacinamide 10% Serum",
+    valueInr: 549,
+    status: "DELIVERED",
+    note: "Delhivery DL-552310 · delivered 20 hours ago",
+  },
 ];
 
 const TRY_SAYING = [
@@ -42,6 +50,7 @@ const TRY_SAYING = [
   "I want to return ORD-102.",
   "Please cancel order 103.",
   "I bought this 20 days ago and opened it. Can I return it?",
+  "My ORD-104 serum arrived damaged.",
   "Can you check ORD-999?",
   "Can you book me a flight to Goa?",
 ];
@@ -49,12 +58,18 @@ const TRY_SAYING = [
 const istTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
 
+function deliveredAgo(order: OrderView): string {
+  if (order.deliveredDaysAgo) return `${order.deliveredDaysAgo} days ago`;
+  const hours = order.deliveredAt ? Math.round((Date.now() - new Date(order.deliveredAt).getTime()) / 3_600_000) : 0;
+  return `${hours} hours ago`;
+}
+
 function toRow(order: OrderView): OrderRow {
   const note =
     order.status === "OUT_FOR_DELIVERY" && order.expectedBy
       ? `${order.carrier} ${order.trackingId} · expected by ${istTime(order.expectedBy)} today`
       : order.status === "DELIVERED"
-        ? `${order.carrier} ${order.trackingId} · delivered ${order.deliveredDaysAgo} days ago`
+        ? `${order.carrier} ${order.trackingId} · delivered ${deliveredAgo(order)}`
         : "Ordered 3 hours ago · can be cancelled";
   return { ...order, note };
 }

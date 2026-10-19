@@ -8,12 +8,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aura
 import { CallControls } from "@/components/call/call-controls";
 import { CallSummary } from "@/components/call/call-summary";
 import { LiveTranscript } from "@/components/call/live-transcript";
+import { PhotoUploadCard } from "@/components/call/photo-upload-card";
 import { StateIndicator } from "@/components/call/state-indicator";
 import { TestOrdersCard } from "@/components/call/test-orders-card";
+import { findReplacement } from "@/lib/live/toolEvents";
 import { useLiveSession } from "@/lib/live/use-live-session";
 
 export function CallWorkspace() {
-  const { state, transcript, summary, muted, start, end, toggleMute, retrySummary } = useLiveSession();
+  const { state, transcript, toolEvents, summary, muted, start, end, toggleMute, notePhotos, setBusy, retrySummary } =
+    useLiveSession();
+  const replacement = findReplacement(toolEvents);
 
   useEffect(() => {
     if (state.error) toast.error(state.error);
@@ -46,6 +50,16 @@ export function CallWorkspace() {
             <LiveTranscript entries={transcript} />
           </CardContent>
         </Card>
+        {replacement && (
+          <PhotoUploadCard
+            key={replacement.referenceId}
+            referenceId={replacement.referenceId}
+            maxPhotos={replacement.maxPhotos}
+            photoCount={replacement.photoCount}
+            onUploaded={notePhotos}
+            onBusy={setBusy}
+          />
+        )}
         <CallSummary summary={summary} onRetry={retrySummary} />
       </div>
       <TestOrdersCard />

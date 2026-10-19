@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DAY_MS, getOrder, istTimeToday, listOrders } from "@/data/orders";
+import { DAY_MS, HOUR_MS, getOrder, istTimeToday, listOrders } from "@/data/orders";
 
 describe("istTimeToday", () => {
   it("returns 18:00 IST on the same IST day", () => {
@@ -17,8 +17,14 @@ describe("istTimeToday", () => {
 describe("orders", () => {
   const now = new Date("2026-10-18T05:00:00Z");
 
-  it("has the three brief orders", () => {
-    expect(listOrders(now).map((o) => o.orderId)).toEqual(["ORD-101", "ORD-102", "ORD-103"]);
+  it("has the three brief orders plus ORD-104 for damage testing", () => {
+    expect(listOrders(now).map((o) => o.orderId)).toEqual(["ORD-101", "ORD-102", "ORD-103", "ORD-104"]);
+  });
+
+  it("ORD-104 was delivered 20 hours ago, inside the damage window", () => {
+    const order = getOrder("ORD-104", now);
+    expect(order?.status).toBe("DELIVERED");
+    expect(now.getTime() - (order?.deliveredAt?.getTime() ?? 0)).toBe(20 * HOUR_MS);
   });
 
   it("ORD-101 is out for delivery, expected 6 PM IST today", () => {

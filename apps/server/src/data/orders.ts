@@ -58,6 +58,18 @@ export function listOrders(now: Date = new Date()): Order[] {
       status: "PROCESSING",
       orderedAt: ago(now, 3 * HOUR_MS),
     },
+    // Not in the brief: the only order inside the 48-hour damage window, so replacements can be tested.
+    {
+      orderId: "ORD-104",
+      customerName: "Karan Mehta",
+      product: "Niacinamide 10% Serum",
+      valueInr: 549,
+      status: "DELIVERED",
+      carrier: "Delhivery",
+      trackingId: "DL-552310",
+      orderedAt: ago(now, 4 * DAY_MS),
+      deliveredAt: ago(now, 20 * HOUR_MS),
+    },
   ];
 }
 

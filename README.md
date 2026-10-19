@@ -56,6 +56,8 @@ Four tools are declared with descriptions that say exactly when to call them:
 - `get_order_details(order_id)`: any question about a specific order.
 - `check_order_action(order_id, action, product_opened?)`: before saying whether a cancellation, return or damaged-product replacement is possible. It only checks and never records anything, so "can I cancel?" is just a question.
 - `confirm_order_action(order_id, action, product_opened?)`: only after the check was eligible and the customer clearly said yes. The server runs the policy again, records the request and returns a reference ID. Confirming the same order and action twice returns the same reference ID.
+
+  For a damaged-product replacement, the result also asks for photos. An upload box appears next to the transcript, and the customer can add up to 3 photos while the call goes on. The browser shrinks each photo to a JPEG under 650 KB and sends it to `POST /api/replacements/:referenceId/photos`, which checks the file really is a JPEG, PNG or WebP image. Aria is told when photos arrive so she can thank the customer, and the silence check-in pauses while the photo picker is open.
 - `escalate_to_human(reason, order_id?, note)`: straight away when the customer asks for a person. Aria offers it, and calls it only if the customer agrees, after a policy refusal is disputed twice, after two failed attempts to understand the customer, or when the request is about Aura but no tool covers it. It opens an `ESC-XXXX` callback ticket and returns the callback promise, so Aria doesn't make up a timeline. A second escalation in the same call reuses the first ticket. Escalating never changes a policy decision.
 
 All four are declared as blocking, so Aria waits for the real result instead of talking over it. The system prompt adds hard rules: never state order facts without a lookup in this call, never promise an action without an eligible result, and ask for the ID if it's missing. Spoken IDs like "order one oh one" or "one hundred and three" are normalised on the server. Unknown IDs come back as a normal `found: false` result, so Aria reads the ID back and asks the customer to verify it instead of guessing.
@@ -72,7 +74,9 @@ All four are declared as blocking, so Aria waits for the real result instead of 
 - Orders of exactly ₹499 get free delivery. The brief says "above ₹499" is free and "below ₹499" pays ₹50, so I read ₹499 itself as free.
 - Mock order dates are relative ("delivered 14 days ago", "expected by 6 PM today" IST), so the demo stays correct on any day.
 - There's no customer identity verification before sharing order details. A production agent would verify a phone number or email first.
-- Confirmed actions return a reference ID but don't change the mock data, so every tester sees the same three orders.
+- Confirmed actions return a reference ID but don't change the mock data, so every tester sees the same orders.
+- ORD-104 (delivered 20 hours ago) is an extra test order that isn't in the brief. None of the brief's orders is inside the 48-hour damage window, so without it the replacement and photo flow couldn't be tried.
+- Uploaded photos are checked and counted but not stored; only their size and type are kept in memory. A real system would put them in object storage against the replacement request.
 - The token, summary and tool endpoints are rate-limited in memory per IP (5, 10 and 120 calls per 10 minutes). On serverless, this applies per instance; a shared store such as Redis would be needed at scale.
 
 ## Running locally

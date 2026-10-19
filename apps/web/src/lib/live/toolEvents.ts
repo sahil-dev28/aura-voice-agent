@@ -8,6 +8,9 @@ type ActionResult = LookupResult & {
   escalated?: boolean;
   ticketId?: string;
   reason?: string;
+  photoUpload?: { maxPhotos: number; photoCount: number };
+  photoCount?: number;
+  maxPhotos?: number;
 };
 
 const humanStatus = (status = "") => status.toLowerCase().replaceAll("_", " ");
@@ -26,12 +29,25 @@ export function describeToolEvent(name: string, args: Record<string, unknown>, r
       ? `Recorded ${String(args.action)} for ${r.orderId}: ref ${r.referenceId}`
       : `Could not record ${String(args.action)} for ${r.orderId}: not eligible (${r.reasonCode})`;
   }
+  if (name === "photo_upload") return `Photos received for ${r.referenceId}: ${r.photoCount} of ${r.maxPhotos}`;
   if (name === "escalate_to_human") return `Escalated to human: ${r.ticketId} (${humanStatus(r.reason)})`;
   return `Called ${name}`;
 }
 
 export function findEscalation(events: { name: string; result: unknown }[]): unknown {
   return events.find((event) => event.name === "escalate_to_human" && (event.result as ActionResult)?.escalated)?.result;
+}
+
+export function findReplacement(
+  events: { name: string; result: unknown }[],
+): { referenceId: string; maxPhotos: number; photoCount: number } | undefined {
+  for (const event of events) {
+    const r = event.result as ActionResult;
+    if (event.name === "confirm_order_action" && r?.confirmed && r.referenceId && r.photoUpload) {
+      return { referenceId: r.referenceId, ...r.photoUpload };
+    }
+  }
+  return undefined;
 }
 
 export function filterCancelled<T extends { id?: string }>(responses: T[], cancelled: ReadonlySet<string>): T[] {

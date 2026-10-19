@@ -65,5 +65,17 @@ export function useLiveSession() {
     if (lastCall.current) void requestSummary(lastCall.current, setSummary);
   }, []);
 
-  return { state, transcript, toolEvents, summary, muted, start, end: call.end, toggleMute, retrySummary };
+  return {
+    state,
+    transcript,
+    toolEvents,
+    summary,
+    muted,
+    start,
+    end: call.end,
+    toggleMute,
+    notePhotos: call.notePhotos,
+    setBusy: call.setBusy,
+    retrySummary,
+  };
 }

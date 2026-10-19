@@ -9,10 +9,10 @@ const confirm = (body: object) => request(app).post("/api/tools/confirm_order_ac
 const escalate = (body: object) => request(app).post("/api/tools/escalate_to_human").send(body);
 
 describe("GET /api/orders", () => {
-  it("lists the three orders with derived fields", async () => {
+  it("lists the test orders with derived fields", async () => {
     const res = await request(app).get("/api/orders");
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(3);
+    expect(res.body.data).toHaveLength(4);
     expect(res.body.data[1]).toMatchObject({ orderId: "ORD-102", shippingFeeInr: 0, codEligible: true, deliveredDaysAgo: 14 });
   });
 });
@@ -109,6 +109,18 @@ describe("POST /api/tools/confirm_order_action", () => {
     const res = await confirm({ order_id: "ORD-101", action: "cancel" });
     expect(res.body.data).toMatchObject({ eligible: false, confirmed: false, reasonCode: "NOT_CANCELLABLE_IN_TRANSIT" });
     expect(res.body.data.referenceId).toBeUndefined();
+  });
+
+  it("records an ORD-104 damage replacement and asks for photos", async () => {
+    const res = await confirm({ order_id: "ORD-104", action: "damage_replacement" });
+    expect(res.body.data).toMatchObject({ confirmed: true, photoUpload: { maxPhotos: 3, photoCount: 0 } });
+    expect(res.body.data.referenceId).toMatch(/^RPL-[0-9A-F]{4}$/);
+    expect(res.body.data.nextStep).toMatch(/upload/i);
+  });
+
+  it("only offers a photo upload for replacements", async () => {
+    const res = await confirm({ order_id: "ORD-103", action: "cancel" });
+    expect(res.body.data.photoUpload).toBeUndefined();
   });
 
   it("does not record a return before the customer says whether it was opened", async () => {

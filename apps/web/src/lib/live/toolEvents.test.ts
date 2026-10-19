@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeToolEvent, filterCancelled, findEscalation } from "@/lib/live/toolEvents";
+import { describeToolEvent, filterCancelled, findEscalation, findReplacement } from "@/lib/live/toolEvents";
 
 describe("describeToolEvent", () => {
   it("describes a found order", () => {
@@ -59,6 +59,12 @@ describe("describeToolEvent", () => {
     ).toBe("Escalated to human: ESC-4F2A (policy dispute)");
   });
 
+  it("describes received photos", () => {
+    expect(describeToolEvent("photo_upload", {}, { referenceId: "RPL-1A2B", photoCount: 2, maxPhotos: 3 })).toBe(
+      "Photos received for RPL-1A2B: 2 of 3",
+    );
+  });
+
   it("describes failures", () => {
     expect(describeToolEvent("get_order_details", { order_id: "ORD-101" }, { error: "LOOKUP_UNAVAILABLE" })).toBe(
       "get_order_details failed: LOOKUP_UNAVAILABLE",
@@ -79,6 +85,24 @@ describe("findEscalation", () => {
 
   it("returns undefined when nothing was escalated", () => {
     expect(findEscalation([{ name: "get_order_details", result: { found: true } }])).toBeUndefined();
+  });
+});
+
+describe("findReplacement", () => {
+  it("returns the recorded replacement that takes photos", () => {
+    const events = [
+      { name: "confirm_order_action", result: { confirmed: true, referenceId: "CXL-1111" } },
+      {
+        name: "confirm_order_action",
+        result: { confirmed: true, referenceId: "RPL-1A2B", photoUpload: { maxPhotos: 3, photoCount: 1 } },
+      },
+    ];
+    expect(findReplacement(events)).toEqual({ referenceId: "RPL-1A2B", maxPhotos: 3, photoCount: 1 });
+  });
+
+  it("returns undefined without a recorded replacement", () => {
+    const events = [{ name: "check_order_action", result: { eligible: true } }];
+    expect(findReplacement(events)).toBeUndefined();
   });
 });
 

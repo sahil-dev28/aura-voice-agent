@@ -31,6 +31,8 @@ export type CallOutcome = {
 export type TranscriptRole = "customer" | "agent" | "tool";
 export type TranscriptEntry = { id: string; role: TranscriptRole; text: string; ts: number; closed?: boolean };
 
+export type PhotoUpload = { referenceId: string; photoCount: number; maxPhotos: number };
+
 export type ToolEvent = { id: string; name: string; args: Record<string, unknown>; result: unknown; ts: number };
 
 export type SummaryState =

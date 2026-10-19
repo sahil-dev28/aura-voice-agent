@@ -12,7 +12,7 @@ import { type MicRecorder, startMicRecorder } from "@/lib/audio/mic-recorder";
 import { type SessionEvent, initialSessionState, sessionReducer } from "@/lib/live/sessionReducer";
 import { describeToolEvent, filterCancelled, findEscalation } from "@/lib/live/toolEvents";
 import { addToolEntry, appendTranscript, closeTurn } from "@/lib/live/transcript";
-import type { ToolEvent, TranscriptEntry } from "@/lib/types";
+import type { PhotoUpload, ToolEvent, TranscriptEntry } from "@/lib/types";
 
 export type LiveCallHandlers = {
   onEvent: (event: SessionEvent) => void;
@@ -69,6 +69,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
   let resuming = false;
   let resumes = 0;
   let muted = false;
+  let busy = false;
   let transcript: TranscriptEntry[] = [];
   let toolEvents: ToolEvent[] = [];
   const cancelled = new Set<string>();
@@ -123,14 +124,14 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       clearTimeout(goodbyeTimer);
       return;
     }
-    if (muted || callState.status !== "listening") return;
+    if (muted || busy || callState.status !== "listening") return;
     if (closing) return end();
     silenceTimer = setTimeout(onSilence, SILENCE_MS);
   };
 
   // The transcript arrives late, so mic loudness is what tells us the customer is talking.
   const heardCustomer = () => {
-    if (!active || callState.status !== "listening" || closing) return;
+    if (!active || muted || busy || callState.status !== "listening" || closing) return;
     clearTimeout(silenceTimer);
     silenceTimer = setTimeout(onSilence, SILENCE_MS);
   };
@@ -145,6 +146,13 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     } else {
       heardCustomer();
     }
+  };
+
+  // Busy: the customer is doing something on the page (choosing photos), so quiet is expected.
+  const setBusy = (next: boolean) => {
+    busy = next;
+    if (busy) clearTimeout(silenceTimer);
+    else heardCustomer();
   };
 
   function emit(event: SessionEvent) {
@@ -283,6 +291,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     resuming = false;
     resumes = 0;
     muted = false;
+    busy = false;
     transcript = [];
     toolEvents = [];
     cancelled.clear();
@@ -318,5 +327,16 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     teardown();
   };
 
-  return { start, end, dispose, setMuted };
+  // Photos come from the page, not from a tool call, so they are logged like one for the transcript and summary.
+  const notePhotos = (upload: PhotoUpload) => {
+    if (!active) return;
+    const ts = Date.now();
+    toolEvents = [...toolEvents, { id: `photo_upload-${ts}`, name: "photo_upload", args: {}, result: upload, ts }];
+    handlers.onToolEvents(toolEvents);
+    setTranscript(addToolEntry(transcript, describeToolEvent("photo_upload", {}, upload), ts));
+    const photos = `${upload.photoCount} ${upload.photoCount === 1 ? "photo" : "photos"}`;
+    sendText(`Call system: The customer has now uploaded ${photos} of the damage for ${upload.referenceId}.`);
+  };
+
+  return { start, end, dispose, setMuted, setBusy, notePhotos };
 }

@@ -1,6 +1,6 @@
 import { env } from "@aura/env/web";
 
-import type { CallOutcome, OrderView, TokenResponse } from "@/lib/types";
+import type { CallOutcome, OrderView, PhotoUpload, TokenResponse } from "@/lib/types";
 
 export class ApiError extends Error {
   constructor(
@@ -34,3 +34,9 @@ export const callTool = (name: string, args: Record<string, unknown>, signal?: A
 
 export const getSummary = (body: { transcript: { role: string; text: string; ts: number }[]; toolEvents: unknown[] }) =>
   request<CallOutcome>("/api/summary", { method: "POST", body: JSON.stringify(body) });
+
+export const uploadReplacementPhoto = (referenceId: string, photo: { mime_type: string; data: string }) =>
+  request<PhotoUpload>(`/api/replacements/${encodeURIComponent(referenceId)}/photos`, {
+    method: "POST",
+    body: JSON.stringify(photo),
+  });

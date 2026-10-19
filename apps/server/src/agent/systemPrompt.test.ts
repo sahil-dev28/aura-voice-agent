@@ -31,6 +31,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("escalate_to_human");
     expect(prompt).toMatch(/straight away/i);
     expect(prompt).toContain("Call system:");
+    expect(prompt).toMatch(/upload box/);
     expect(prompt).toMatch(/only help with Aura Skincare/i);
     expect(prompt).toMatch(/repeat/i);
     expect(prompt).toMatch(/Hinglish/);
