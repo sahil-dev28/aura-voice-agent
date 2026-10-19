@@ -5,9 +5,10 @@ import { Toaster } from "sonner";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    // The app has one light theme; it doesn't follow the system's dark mode.
+    <ThemeProvider attribute="class" forcedTheme="light" disableTransitionOnChange>
       {children}
-      <Toaster richColors position="top-center" />
+      <Toaster richColors theme="light" position="top-center" />
     </ThemeProvider>
   );
 }

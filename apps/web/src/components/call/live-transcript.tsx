@@ -16,7 +16,8 @@ export function LiveTranscript({ entries }: { entries: TranscriptEntry[] }) {
   }, [entries]);
 
   return (
-    <ScrollArea className="h-[420px] rounded-lg border">
+    // Compact until the call starts, so an empty box doesn't dominate the card.
+    <ScrollArea className={cn("rounded-lg border", entries.length > 0 ? "h-[420px]" : "h-auto")}>
       <div className="flex flex-col gap-3 p-4">
         {entries.length === 0 && (
           <p className="text-muted-foreground text-sm">The conversation will appear here once the call starts.</p>

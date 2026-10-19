@@ -46,7 +46,8 @@ export function CallWorkspace() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="flex flex-col gap-6">
+      {/* On wide screens the call stays in view while the sidebar scrolls. */}
+      <div className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
         <Card>
           <CardContent className="flex flex-col gap-4">
             <div className="aura-stage flex flex-col items-center gap-4 rounded-xl px-4 pt-6 pb-5">
