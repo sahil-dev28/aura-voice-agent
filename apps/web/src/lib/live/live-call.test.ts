@@ -34,7 +34,7 @@ type Callbacks = { onmessage: (m: unknown) => void; onclose: (e: { reason: strin
 
 const fakeSession = () => ({ close: vi.fn(), sendClientContent: vi.fn(), sendRealtimeInput: vi.fn(), sendToolResponse: vi.fn() });
 const fakeMic = () => ({ stop: vi.fn() });
-const fakePlayer = () => ({ enqueue: vi.fn(), flush: vi.fn(), close: vi.fn() });
+const fakePlayer = () => ({ enqueue: vi.fn(), flush: vi.fn(), close: vi.fn(), level: vi.fn(() => 0.2) });
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -428,6 +428,25 @@ describe("call metrics", () => {
     const { h, onclose } = await startLiveCall();
     onclose({ reason: "network" });
     expect(finished(h).errors).toEqual(["Call disconnected: network"]);
+  });
+});
+
+describe("levels", () => {
+  it("reports Aria's playback level and the last mic level", async () => {
+    const { call } = await startLiveCall();
+    const sendAudio = mocks.startMicRecorder.mock.calls[0]?.[0] as (data: string, level: number) => void;
+    sendAudio("pcm", 0.07);
+    expect(call.levels()).toEqual({ agent: 0.2, mic: 0.07 });
+  });
+
+  it("reports no mic level while muted, and nothing once the call ends", async () => {
+    const { call } = await startLiveCall();
+    const sendAudio = mocks.startMicRecorder.mock.calls[0]?.[0] as (data: string, level: number) => void;
+    sendAudio("pcm", 0.07);
+    call.setMuted(true);
+    expect(call.levels().mic).toBe(0);
+    call.end();
+    expect(call.levels()).toEqual({ agent: 0, mic: 0 });
   });
 });
 

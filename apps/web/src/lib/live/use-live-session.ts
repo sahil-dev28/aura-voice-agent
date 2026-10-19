@@ -88,6 +88,7 @@ export function useLiveSession() {
     setBusy: call.setBusy,
     sendTyped: call.sendTyped,
     noteTyping: call.noteTyping,
+    levels: call.levels,
     retrySummary,
   };
 }

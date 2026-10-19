@@ -73,6 +73,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
   let resumes = 0;
   let muted = false;
   let busy = false;
+  let micLevel = 0;
   let inputMode: CallMetrics["inputMode"] = "voice";
   let metrics = createMetrics();
   let transcript: TranscriptEntry[] = [];
@@ -302,6 +303,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     resumes = 0;
     muted = false;
     busy = false;
+    micLevel = 0;
     metrics = createMetrics();
     metrics.started();
     transcript = [];
@@ -322,6 +324,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       try {
         runMic = await startMicRecorder((data, level) => {
           if (run !== runId || muted) return;
+          micLevel = level;
           if (level >= SPEECH_LEVEL) {
             heardCustomer();
             // Sound while Aria is talking is mostly echo, so it doesn't start a reply timer.
@@ -374,5 +377,9 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     sendText(`Customer (typed): ${text}`);
   };
 
-  return { start, end, dispose, setMuted, setBusy, notePhotos, sendTyped, noteTyping: heardCustomer };
+  // Read on every animation frame by the orb, so it stays out of React state.
+  const levels = () =>
+    active ? { agent: player?.level() ?? 0, mic: muted ? 0 : micLevel } : { agent: 0, mic: 0 };
+
+  return { start, end, dispose, setMuted, setBusy, notePhotos, sendTyped, noteTyping: heardCustomer, levels };
 }

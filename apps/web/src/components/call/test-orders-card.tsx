@@ -51,16 +51,6 @@ const FALLBACK: OrderRow[] = [
   },
 ];
 
-const TRY_SAYING = [
-  "Where is my order ORD-101?",
-  "I want to return ORD-102.",
-  "Please cancel order 103.",
-  "I bought this 20 days ago and opened it. Can I return it?",
-  "My ORD-104 serum arrived damaged.",
-  "Can you check ORD-999?",
-  "Can you book me a flight to Goa?",
-];
-
 const istTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
 
@@ -98,7 +88,7 @@ export function TestOrdersCard() {
           to verify you.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent>
         <ul className="flex flex-col gap-3">
           {orders.map((order) => (
             <li key={order.orderId} className="rounded-lg border p-3 text-sm">
@@ -115,14 +105,6 @@ export function TestOrdersCard() {
             </li>
           ))}
         </ul>
-        <div>
-          <p className="mb-2 font-medium text-sm">Try saying</p>
-          <ul className="list-disc space-y-1 pl-5 text-muted-foreground text-sm">
-            {TRY_SAYING.map((line) => (
-              <li key={line}>“{line}”</li>
-            ))}
-          </ul>
-        </div>
       </CardContent>
     </Card>
   );
