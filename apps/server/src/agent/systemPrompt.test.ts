@@ -39,5 +39,6 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/only help with Aura Skincare/i);
     expect(prompt).toMatch(/repeat/i);
     expect(prompt).toMatch(/Hinglish/);
+    expect(prompt).toContain("mera order kahan hai");
   });
 });
