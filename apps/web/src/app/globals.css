@@ -95,6 +95,11 @@
   html {
     @apply font-sans;
   }
+  /* Tailwind v4 resets buttons to the default cursor */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    @apply cursor-pointer;
+  }
 }
 /* Aria's orb: a glossy pearl that swells with her voice (--level, 0 to 1) and ripples while she speaks */
 @keyframes aura-spin {
