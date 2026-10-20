@@ -55,14 +55,12 @@ End Call ── POST /api/summary ───────────► Gemini Fl
 
 Four tools are declared with descriptions that say exactly when to call them:
 
-- `get_order_details(order_id, phone_last4?)`: any question about a specific order.
-- `check_order_action(order_id, action, phone_last4?, product_opened?)`: before saying whether a cancellation, return or damaged-product replacement is possible. It only checks and never records anything, so "can I cancel?" is just a question.
-- `confirm_order_action(order_id, action, phone_last4?, product_opened?)`: only after the check was eligible and the customer clearly said yes. The server runs the policy again, records the request and returns a reference ID. Confirming the same order and action twice returns the same reference ID.
+- `get_order_details(order_id)`: any question about a specific order.
+- `check_order_action(order_id, action, product_opened?)`: before saying whether a cancellation, return or damaged-product replacement is possible. It only checks and never records anything, so "can I cancel?" is just a question.
+- `confirm_order_action(order_id, action, product_opened?)`: only after the check was eligible and the customer clearly said yes. The server runs the policy again, records the request and returns a reference ID. Confirming the same order and action twice returns the same reference ID.
 
   For a damaged-product replacement, the result also asks for photos. An upload box appears next to the transcript, and the customer can add up to 3 photos while the call goes on. The browser shrinks each photo to a JPEG under 650 KB and sends it to `POST /api/replacements/:referenceId/photos`, which checks the file really is a JPEG, PNG or WebP image. Aria is told when photos arrive so she can thank the customer, and the silence check-in pauses while the photo picker is open.
 - `escalate_to_human(reason, order_id?, note)`: straight away when the customer asks for a person. Aria offers it, and calls it only if the customer agrees, after a policy refusal is disputed twice, after two failed attempts to understand the customer, or when the request is about Aura but no tool covers it. It opens an `ESC-XXXX` callback ticket and returns the callback promise, so Aria doesn't make up a timeline. A second escalation in the same call reuses the first ticket. Escalating never changes a policy decision.
-
-**Verification.** The three order tools answer nothing about an order until the customer gives the last four digits of the phone number on it (shown on the test orders card). Without them the result is `NEEDS_VERIFICATION`, and wrong digits give `VERIFICATION_FAILED`, with no order details either way. Spoken digits ("three seven two one") are accepted. Because the tool API is public, five wrong attempts from one IP for one order lock that order for that IP for 15 minutes (`VERIFICATION_LOCKED`). Aria asks once more after a failure and then offers a specialist.
 
 All four are declared as blocking, so Aria waits for the real result instead of talking over it. The system prompt adds hard rules: never state order facts without a lookup in this call, never promise an action without an eligible result, and ask for the ID if it's missing. Spoken IDs like "order one oh one" or "one hundred and three" are normalised on the server. Unknown IDs come back as a normal `found: false` result, so Aria reads the ID back and asks the customer to verify it instead of guessing.
 
@@ -77,7 +75,7 @@ All four are declared as blocking, so Aria waits for the real result instead of 
 
 - Orders of exactly ₹499 get free delivery. The brief says "above ₹499" is free and "below ₹499" pays ₹50, so I read ₹499 itself as free.
 - Mock order dates are relative ("delivered 14 days ago", "expected by 6 PM today" IST), so the demo stays correct on any day.
-- Customers are verified by the last four digits of the phone number on the order. That's enough for a demo; a production agent would use a one-time code sent to that number.
+- The brief gives no customer contact details, so the order ID alone is enough to look up an order. Aria never asks for a phone number or other proof of identity.
 - Confirmed actions return a reference ID but don't change the mock data, so every tester sees the same orders.
 - ORD-104 (delivered 20 hours ago) is an extra test order that isn't in the brief. None of the brief's orders is inside the 48-hour damage window, so without it the replacement and photo flow couldn't be tried.
 - Uploaded photos are checked and counted but not stored; only their size and type are kept in memory. A real system would put them in object storage against the replacement request.
@@ -108,12 +106,12 @@ apps/
   server/src/
     agent/        system prompt, brand knowledge, tool declarations
     controller/   token, tool, summary, photo and metrics handlers
-    data/         mock orders, recorded requests, verification lockout
+    data/         mock orders, recorded requests
     evals/        conversation test scenarios, runner and scorer
     middleware/   validation, rate limit
     routes/       /api/token, /api/tools, /api/orders, /api/summary, /api/replacements, /api/metrics
     schema/       Zod schemas
-    utils/        order ID and phone normalisation, policy rules, Gemini client
+    utils/        order ID normalisation, policy rules, Gemini client
   web/src/
     app/          Next.js App Router
     components/   call UI
@@ -126,9 +124,9 @@ packages/
 ## Testing
 
 `pnpm test` covers:
-- order ID and phone digit normalisation
+- order ID normalisation
 - every policy rule, including the 20-day opened return and the 48-hour damage window
-- the tool, token, summary, photo and metrics endpoints, with Gemini mocked, including verification and its lockout
+- the tool, token, summary, photo and metrics endpoints, with Gemini mocked
 - the rate limiter
 - PCM conversion and photo resizing maths
 - every state-machine transition, the live call controller (silence, call limit, reconnecting, mute, typing, metrics) and the transcript helpers
@@ -138,7 +136,7 @@ packages/
 
 `pnpm --filter server eval` runs scripted conversations against the real Gemini Live model with the same locked config as production, and scores each one automatically. Customer turns go in through the typed-message path, tool calls hit the real tool API in-process, and each scenario checks which tools were called (and with which arguments) and what Aria said or must not say. The scenarios are in `apps/server/src/evals/scenarios.ts`:
 
-tracking, wrong verification digits, missing ID, unknown ID (Aria must not try other IDs), refused return, confirmed cancellation, declined cancellation (nothing recorded), damage replacement (photo upload offered), handoff to a person, off-topic request, a typed message pretending to be a `Call system:` instruction, and Hinglish.
+tracking, missing ID, unknown ID (Aria must not try other IDs), refused return, confirmed cancellation, declined cancellation (nothing recorded), damage replacement (photo upload offered), handoff to a person, off-topic request, a typed message pretending to be a `Call system:` instruction, and Hinglish.
 
 ```bash
 pnpm --filter server eval                        # every scenario once
@@ -173,17 +171,17 @@ The other hard part was the call lifecycle. Audio, the WebSocket, tool calls and
 
 ### 3. One more week: what first and why?
 
-The conversation test suite, customer verification and per-call latency numbers from my first answer to this question are now built, so the next week would go to:
+The conversation test suite and per-call latency numbers from my first answer to this question are now built, so the next week would go to:
 
 1. **Audio in the conversation tests.** The scenarios run on typed turns today. Feeding the same scenarios in as synthesised speech (Indian English and Hinglish voices, with some background noise) would cover speech recognition, barge-in and the silence check-in, which are still checked by hand.
 2. **A real handoff.** `escalate_to_human` opens a callback ticket. Next, send the ticket and the call summary to a real support queue, and offer a live transfer when a specialist is free.
-3. **Stronger verification.** Replace the last-four-digits check with a one-time code sent to the phone number on the order.
+3. **Customer verification.** Anyone with an order ID can look it up today. Confirm the caller with a one-time code sent to the phone number on the order before sharing details.
 
 ### 4. At 1,000 conversations a day, what changes?
 
 1,000 calls a day is only around 10 to 30 calls at the same time at peak, so the architecture holds: audio already goes browser → Gemini directly and the API is stateless. What changes is everything around it:
 - **Quotas and cost.** Move to a paid Gemini tier with enough concurrent Live sessions, tune the 10-minute call cap and the silence timeout from real calls, and track cost per call.
-- **Shared state.** The in-memory rate limiter only works per serverless instance, so it moves to Redis (or the platform's edge rate limiting). Rate limits should also be per verified customer, not just per IP.
+- **Shared state.** The in-memory rate limiter only works per serverless instance, so it moves to Redis (or the platform's edge rate limiting). Rate limits should also be per customer, not just per IP.
 - **Real data.** The mock order list becomes the real order and returns system, with timeouts, retries and caching, and allowed actions actually create the cancellation or return.
 - **Storage and privacy.** Save transcripts, tool calls and summaries to a database for QA, analytics and disputes, with a retention policy and PII redaction.
 - **Async summaries.** Generate the summary in a background job with retries, so a slow model call never blocks the end of a call.

@@ -33,8 +33,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Call system:");
     expect(prompt).toMatch(/upload box/);
     expect(prompt).toContain("Customer (typed):");
-    expect(prompt).toMatch(/last four digits of the phone number/);
-    expect(prompt).toContain("VERIFICATION_LOCKED");
+    expect(prompt).toMatch(/do not ask for a phone number/);
     expect(prompt).toMatch(/without saying "IST"/);
     expect(prompt).toMatch(/only help with Aura Skincare/i);
     expect(prompt).toMatch(/repeat/i);

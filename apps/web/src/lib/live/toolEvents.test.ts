@@ -65,16 +65,6 @@ describe("describeToolEvent", () => {
     );
   });
 
-  it.each([
-    ["NEEDS_VERIFICATION", "Verification needed for ORD-101"],
-    ["VERIFICATION_FAILED", "Verification failed for ORD-101"],
-    ["VERIFICATION_LOCKED", "Verification locked for ORD-101"],
-  ])("describes %s", (reason, text) => {
-    expect(describeToolEvent("get_order_details", { order_id: "101" }, { found: true, orderId: "ORD-101", verified: false, reason })).toBe(
-      text,
-    );
-  });
-
   it("describes failures", () => {
     expect(describeToolEvent("get_order_details", { order_id: "ORD-101" }, { error: "LOOKUP_UNAVAILABLE" })).toBe(
       "get_order_details failed: LOOKUP_UNAVAILABLE",

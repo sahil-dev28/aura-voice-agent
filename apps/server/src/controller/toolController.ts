@@ -1,12 +1,10 @@
 import type { Request, Response } from "express";
 
 import { type Order, getOrder, listOrders } from "@/data/orders";
-import { isLocked, recordFailure } from "@/data/verification";
 import { MAX_PHOTOS, getRequest, openTicket, recordRequest } from "@/data/requests";
 import type { CheckOrderActionInput, EscalateToHumanInput, GetOrderDetailsInput, OrderAction } from "@/schema/tool";
 import { formatUnknownError } from "@/utils/formatUnknownError";
 import { normalizeOrderId } from "@/utils/orderId";
-import { lastFourDigits } from "@/utils/phone";
 import {
   type Decision,
   canCancel,
@@ -32,28 +30,9 @@ function findOrder(raw: string, now: Date): Order | NotFound {
   return getOrder(normalized.orderId, now) ?? { found: false, reason: "NOT_FOUND", heard: raw };
 }
 
-type Unverified = {
-  found: true;
-  orderId: string;
-  verified: false;
-  reason: "NEEDS_VERIFICATION" | "VERIFICATION_FAILED" | "VERIFICATION_LOCKED";
-};
-
-// Order tools only answer once the caller gives the last four digits of the phone number on the order.
-function verify(order: Order, phoneLast4: string | undefined, req: Request, now: Date): Unverified | null {
-  const key = `${req.ip}:${order.orderId}`;
-  const deny = (reason: Unverified["reason"]): Unverified => ({ found: true, orderId: order.orderId, verified: false, reason });
-  if (isLocked(key, now)) return deny("VERIFICATION_LOCKED");
-  if (!phoneLast4) return deny("NEEDS_VERIFICATION");
-  if (lastFourDigits(phoneLast4) === order.phone.slice(-4)) return null;
-  recordFailure(key, now);
-  return deny(isLocked(key, now) ? "VERIFICATION_LOCKED" : "VERIFICATION_FAILED");
-}
-
-function toOrderView({ phone, ...order }: Order, now: Date) {
+function toOrderView(order: Order, now: Date) {
   return {
     ...order,
-    phoneLast4: phone.slice(-4),
     shippingFeeInr: shippingFee(order.valueInr),
     codEligible: isCodEligible(order.valueInr),
     deliveredDaysAgo: order.deliveredAt ? daysSince(order.deliveredAt, now) : undefined,
@@ -65,9 +44,8 @@ const formatIst = (date: Date) =>
 
 // The model reads ISO timestamps as local time ("12:30" for 6 PM IST), so the tool gives it IST text instead.
 function toToolOrderView(order: Order, now: Date) {
-  const { phoneLast4: _phoneLast4, ...view } = toOrderView(order, now);
   return {
-    ...view,
+    ...toOrderView(order, now),
     orderedAt: formatIst(order.orderedAt),
     expectedBy: order.expectedBy ? formatIst(order.expectedBy) : undefined,
     deliveredAt: order.deliveredAt ? formatIst(order.deliveredAt) : undefined,
@@ -104,11 +82,6 @@ export const getOrderDetails = async (req: Request, res: Response): Promise<void
       res.status(200).json({ data: order });
       return;
     }
-    const unverified = verify(order, (req.body as GetOrderDetailsInput).phone_last4, req, now);
-    if (unverified) {
-      res.status(200).json({ data: unverified });
-      return;
-    }
     res.status(200).json({ data: { found: true, order: toToolOrderView(order, now), cancel: canCancel(order) } });
     return;
   } catch (error) {
@@ -123,11 +96,6 @@ export const checkOrderAction = async (req: Request, res: Response): Promise<voi
     const order = findOrder(input.order_id, now);
     if ("found" in order) {
       res.status(200).json({ data: order });
-      return;
-    }
-    const unverified = verify(order, (req.body as GetOrderDetailsInput).phone_last4, req, now);
-    if (unverified) {
-      res.status(200).json({ data: unverified });
       return;
     }
     const decision = decide(order, input, now);
@@ -145,11 +113,6 @@ export const confirmOrderAction = async (req: Request, res: Response): Promise<v
     const order = findOrder(input.order_id, now);
     if ("found" in order) {
       res.status(200).json({ data: order });
-      return;
-    }
-    const unverified = verify(order, (req.body as GetOrderDetailsInput).phone_last4, req, now);
-    if (unverified) {
-      res.status(200).json({ data: unverified });
       return;
     }
     const decision = decide(order, input, now);

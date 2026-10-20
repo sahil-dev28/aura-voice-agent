@@ -20,7 +20,7 @@ const server = app.listen(0, "127.0.0.1");
 await once(server, "listening");
 const { port } = server.address() as AddressInfo;
 
-// Each run gets its own client address, so the verification lockout and rate limits never leak between runs.
+// Each run gets its own client address, so rate limits never leak between runs.
 function depsFor(clientIp: string): RunnerDeps {
   return {
     open: async (onMessage) => {

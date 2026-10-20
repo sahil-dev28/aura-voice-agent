@@ -19,12 +19,6 @@ describe("liveConnectConfig", () => {
     expect(names).toEqual(["get_order_details", "check_order_action", "confirm_order_action", "escalate_to_human"]);
   });
 
-  it("asks for the phone digits on every order tool", () => {
-    const declarations = config.tools?.flatMap((tool) => ("functionDeclarations" in tool ? (tool.functionDeclarations ?? []) : []));
-    const withPhone = declarations?.filter((fn) => fn.parameters?.properties?.phone_last4).map((fn) => fn.name);
-    expect(withPhone).toEqual(["get_order_details", "check_order_action", "confirm_order_action"]);
-  });
-
   it("makes every tool blocking so Aria waits for results", () => {
     const behaviors = config.tools?.flatMap((tool) =>
       "functionDeclarations" in tool ? (tool.functionDeclarations ?? []).map((fn) => fn.behavior) : [],

@@ -10,7 +10,6 @@ type ActionResult = LookupResult & {
   reason?: string;
   photoUpload?: { maxPhotos: number; photoCount: number };
   photoCount?: number;
-  verified?: boolean;
   maxPhotos?: number;
 };
 
@@ -19,10 +18,6 @@ const humanStatus = (status = "") => status.toLowerCase().replaceAll("_", " ");
 export function describeToolEvent(name: string, args: Record<string, unknown>, result: unknown): string {
   const r = (result ?? {}) as ActionResult;
   if (r.error) return `${name} failed: ${r.error}`;
-  if (r.verified === false) {
-    const outcome = { VERIFICATION_FAILED: "failed", VERIFICATION_LOCKED: "locked" }[r.reason ?? ""] ?? "needed";
-    return `Verification ${outcome} for ${r.orderId}`;
-  }
   if (r.found === false) return `No order found for "${r.heard ?? String(args.order_id ?? "")}"`;
   if (name === "get_order_details") return `Looked up ${r.order?.orderId}: ${humanStatus(r.order?.status)}`;
   if (name === "check_order_action") {

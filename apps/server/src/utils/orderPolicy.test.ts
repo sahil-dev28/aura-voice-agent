@@ -7,7 +7,6 @@ const now = new Date("2026-10-18T05:00:00Z");
 const delivered = (msAgo: number): Order => ({
   orderId: "ORD-900",
   customerName: "Test",
-  phone: "+91 90000 00000",
   product: "Serum",
   valueInr: 699,
   status: "DELIVERED",

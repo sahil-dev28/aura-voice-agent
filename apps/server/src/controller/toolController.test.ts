@@ -19,7 +19,7 @@ describe("GET /api/orders", () => {
 
 describe("POST /api/tools/get_order_details", () => {
   it("finds ORD-101 from a spoken id", async () => {
-    const res = await lookup({ order_id: "order one oh one", phone_last4: "3721" });
+    const res = await lookup({ order_id: "order one oh one" });
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({
       found: true,
@@ -31,7 +31,7 @@ describe("POST /api/tools/get_order_details", () => {
   });
 
   it("gives delivery dates in IST so the model doesn't read UTC as local time", async () => {
-    const res = await lookup({ order_id: "ORD-102", phone_last4: "5508" });
+    const res = await lookup({ order_id: "ORD-102" });
     expect(res.body.data.order.deliveredAt).toMatch(/^\d{1,2} \w{3} \d{4}, .+ IST$/);
   });
 
@@ -54,55 +54,22 @@ describe("POST /api/tools/get_order_details", () => {
   });
 
   it("ignores extra arguments from the model", async () => {
-    const res = await lookup({ order_id: "ORD-103", phone_last4: "9264", note: "x" });
+    const res = await lookup({ order_id: "ORD-103", note: "x" });
     expect(res.body.data.found).toBe(true);
   });
 });
 
-describe("customer verification", () => {
-  it("asks for verification before sharing any order detail", async () => {
+describe("no identity check", () => {
+  it("shares order details from the order ID alone", async () => {
     const res = await lookup({ order_id: "ORD-101" });
-    expect(res.body.data).toEqual({ found: true, orderId: "ORD-101", verified: false, reason: "NEEDS_VERIFICATION" });
-  });
-
-  it("refuses the wrong digits without sharing details", async () => {
-    const res = await lookup({ order_id: "ORD-101", phone_last4: "0000" });
-    expect(res.body.data).toEqual({ found: true, orderId: "ORD-101", verified: false, reason: "VERIFICATION_FAILED" });
-  });
-
-  it("accepts the digits as spoken words", async () => {
-    const res = await lookup({ order_id: "ORD-101", phone_last4: "three seven two one" });
     expect(res.body.data).toMatchObject({ found: true, order: { orderId: "ORD-101" } });
-  });
-
-  it("does not check or record an action without verification", async () => {
-    const check = await action({ order_id: "ORD-103", action: "cancel" });
-    expect(check.body.data).toMatchObject({ verified: false, reason: "NEEDS_VERIFICATION" });
-    expect(check.body.data.eligible).toBeUndefined();
-    const record = await confirm({ order_id: "ORD-103", action: "cancel", phone_last4: "1111" });
-    expect(record.body.data).toMatchObject({ verified: false, reason: "VERIFICATION_FAILED" });
-    expect(record.body.data.referenceId).toBeUndefined();
-  });
-
-  it("still reports unknown ids first, so the customer can fix the id", async () => {
-    const res = await lookup({ order_id: "ORD-109" });
-    expect(res.body.data).toMatchObject({ found: false, reason: "NOT_FOUND" });
-  });
-
-  it("locks the order for this caller after 5 wrong attempts", async () => {
-    const from = (ip: string, phone: string) =>
-      request(app).post("/api/tools/get_order_details").set("X-Forwarded-For", ip).send({ order_id: "ORD-102", phone_last4: phone });
-    for (let i = 0; i < 5; i++) await from("10.0.0.9", "0000");
-    const locked = await from("10.0.0.9", "5508");
-    expect(locked.body.data).toMatchObject({ verified: false, reason: "VERIFICATION_LOCKED" });
-    const other = await from("10.0.0.10", "5508");
-    expect(other.body.data).toMatchObject({ found: true, order: { orderId: "ORD-102" } });
+    expect(res.body.data.order.phone).toBeUndefined();
   });
 });
 
 describe("POST /api/tools/check_order_action", () => {
   it("says ORD-103 can be cancelled without recording it", async () => {
-    const res = await action({ order_id: "ORD-103", phone_last4: "9264", action: "cancel" });
+    const res = await action({ order_id: "ORD-103", action: "cancel" });
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ found: true, orderId: "ORD-103", action: "cancel", eligible: true });
     expect(res.body.data.referenceId).toBeUndefined();
@@ -110,18 +77,18 @@ describe("POST /api/tools/check_order_action", () => {
   });
 
   it("refuses ORD-102 return without a reference", async () => {
-    const res = await action({ order_id: "ORD-102", phone_last4: "5508", action: "return", product_opened: false });
+    const res = await action({ order_id: "ORD-102", action: "return", product_opened: false });
     expect(res.body.data).toMatchObject({ eligible: false, reasonCode: "RETURN_WINDOW_EXPIRED" });
     expect(res.body.data.referenceId).toBeUndefined();
   });
 
   it("refuses ORD-101 cancellation", async () => {
-    const res = await action({ order_id: "101", phone_last4: "3721", action: "cancel" });
+    const res = await action({ order_id: "101", action: "cancel" });
     expect(res.body.data).toMatchObject({ eligible: false, reasonCode: "NOT_CANCELLABLE_IN_TRANSIT" });
   });
 
   it("refuses ORD-102 damage replacement after 48h", async () => {
-    const res = await action({ order_id: "ORD-102", phone_last4: "5508", action: "damage_replacement" });
+    const res = await action({ order_id: "ORD-102", action: "damage_replacement" });
     expect(res.body.data.reasonCode).toBe("DAMAGE_REPORT_WINDOW_EXPIRED");
   });
 
@@ -131,7 +98,7 @@ describe("POST /api/tools/check_order_action", () => {
   });
 
   it("rejects an unknown action with 400", async () => {
-    const res = await action({ order_id: "ORD-103", phone_last4: "9264", action: "refund" });
+    const res = await action({ order_id: "ORD-103", action: "refund" });
     expect(res.status).toBe(400);
     expect(res.body.fieldErrors).toHaveProperty("action");
   });
@@ -139,7 +106,7 @@ describe("POST /api/tools/check_order_action", () => {
 
 describe("POST /api/tools/confirm_order_action", () => {
   it("records the ORD-103 cancellation with a CXL reference", async () => {
-    const res = await confirm({ order_id: "ORD-103", phone_last4: "9264", action: "cancel" });
+    const res = await confirm({ order_id: "ORD-103", action: "cancel" });
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ found: true, orderId: "ORD-103", action: "cancel", eligible: true, confirmed: true });
     expect(res.body.data.referenceId).toMatch(/^CXL-[0-9A-F]{4}$/);
@@ -147,31 +114,31 @@ describe("POST /api/tools/confirm_order_action", () => {
   });
 
   it("returns the same reference when confirmed twice", async () => {
-    const first = await confirm({ order_id: "ORD-103", phone_last4: "9264", action: "cancel" });
-    const second = await confirm({ order_id: "order one zero three", phone_last4: "9264", action: "cancel" });
+    const first = await confirm({ order_id: "ORD-103", action: "cancel" });
+    const second = await confirm({ order_id: "order one zero three", action: "cancel" });
     expect(second.body.data.referenceId).toBe(first.body.data.referenceId);
   });
 
   it("re-checks policy and refuses ORD-101 cancellation", async () => {
-    const res = await confirm({ order_id: "ORD-101", phone_last4: "3721", action: "cancel" });
+    const res = await confirm({ order_id: "ORD-101", action: "cancel" });
     expect(res.body.data).toMatchObject({ eligible: false, confirmed: false, reasonCode: "NOT_CANCELLABLE_IN_TRANSIT" });
     expect(res.body.data.referenceId).toBeUndefined();
   });
 
   it("records an ORD-104 damage replacement and asks for photos", async () => {
-    const res = await confirm({ order_id: "ORD-104", phone_last4: "1187", action: "damage_replacement" });
+    const res = await confirm({ order_id: "ORD-104", action: "damage_replacement" });
     expect(res.body.data).toMatchObject({ confirmed: true, photoUpload: { maxPhotos: 3, photoCount: 0 } });
     expect(res.body.data.referenceId).toMatch(/^RPL-[0-9A-F]{4}$/);
     expect(res.body.data.nextStep).toMatch(/upload/i);
   });
 
   it("only offers a photo upload for replacements", async () => {
-    const res = await confirm({ order_id: "ORD-103", phone_last4: "9264", action: "cancel" });
+    const res = await confirm({ order_id: "ORD-103", action: "cancel" });
     expect(res.body.data.photoUpload).toBeUndefined();
   });
 
   it("does not record a return before the customer says whether it was opened", async () => {
-    const res = await confirm({ order_id: "ORD-102", phone_last4: "5508", action: "return" });
+    const res = await confirm({ order_id: "ORD-102", action: "return" });
     expect(res.body.data).toMatchObject({ confirmed: false });
     expect(res.body.data.referenceId).toBeUndefined();
   });
@@ -182,7 +149,7 @@ describe("POST /api/tools/confirm_order_action", () => {
   });
 
   it("rejects an unknown action with 400", async () => {
-    const res = await confirm({ order_id: "ORD-103", phone_last4: "9264", action: "refund" });
+    const res = await confirm({ order_id: "ORD-103", action: "refund" });
     expect(res.status).toBe(400);
     expect(res.body.fieldErrors).toHaveProperty("action");
   });
@@ -232,7 +199,7 @@ describe("tool rate limit", () => {
   it("returns 429 after the per-IP limit", async () => {
     let last = 0;
     for (let i = 0; i < 125; i++) {
-      last = (await lookup({ order_id: "ORD-101", phone_last4: "3721" })).status;
+      last = (await lookup({ order_id: "ORD-101" })).status;
     }
     expect(last).toBe(429);
   });
