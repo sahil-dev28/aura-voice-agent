@@ -28,6 +28,8 @@ const TOOL_TIMEOUT_MS = 5000;
 const GREETING_TRIGGER = "The customer has just joined the call. Greet them now.";
 const TYPING_GREETING =
   "The customer has just joined the call. Their microphone is unavailable, so they will type their messages. Greet them now.";
+const CHOSE_TYPING_GREETING =
+  "The customer has just joined the call. They chose to type their messages instead of speaking. Greet them now.";
 const SILENCE_MS = 10_000;
 const SPEECH_LEVEL = 0.02;
 const GOODBYE_GRACE_MS = 10_000;
@@ -290,7 +292,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     }
   }
 
-  async function start() {
+  async function start({ typing = false }: { typing?: boolean } = {}) {
     if (active) return;
     const run = ++runId;
     const stale = () => run !== runId || !active;
@@ -321,19 +323,21 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       player = runPlayer;
       // A blocked or missing mic doesn't end the call: the customer types instead.
       let runMic: MicRecorder | null = null;
-      try {
-        runMic = await startMicRecorder((data, level) => {
-          if (run !== runId || muted) return;
-          micLevel = level;
-          if (level >= SPEECH_LEVEL) {
-            heardCustomer();
-            // Sound while Aria is talking is mostly echo, so it doesn't start a reply timer.
-            if (callState.status !== "speaking") metrics.customerSpoke();
-          }
-          session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } });
-        });
-      } catch (error) {
-        if (!micUnavailable(error)) throw error;
+      if (!typing) {
+        try {
+          runMic = await startMicRecorder((data, level) => {
+            if (run !== runId || muted) return;
+            micLevel = level;
+            if (level >= SPEECH_LEVEL) {
+              heardCustomer();
+              // Sound while Aria is talking is mostly echo, so it doesn't start a reply timer.
+              if (callState.status !== "speaking") metrics.customerSpoke();
+            }
+            session?.sendRealtimeInput({ audio: { data, mimeType: "audio/pcm;rate=16000" } });
+          });
+        } catch (error) {
+          if (!micUnavailable(error)) throw error;
+        }
       }
       if (stale()) return runMic?.stop();
       mic = runMic;
@@ -344,7 +348,7 @@ export function createLiveCall(handlers: LiveCallHandlers) {
       emit({ type: "OPEN" });
       wrapUpTimer = setTimeout(() => sendText(WRAP_UP), CALL_LIMIT_MS - WRAP_UP_BEFORE_MS);
       limitTimer = setTimeout(end, CALL_LIMIT_MS);
-      sendText(mic ? GREETING_TRIGGER : TYPING_GREETING);
+      sendText(mic ? GREETING_TRIGGER : typing ? CHOSE_TYPING_GREETING : TYPING_GREETING);
     } catch (error) {
       if (run === runId) fail(startErrorMessage(error));
     }

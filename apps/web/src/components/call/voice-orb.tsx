@@ -6,7 +6,7 @@ import { type Levels, orbTarget, smooth } from "@/lib/live/orb";
 import type { CallStatus } from "@/lib/live/sessionReducer";
 
 const STATES: Record<CallStatus, { label: string; hint: string }> = {
-  idle: { label: "Ready when you are", hint: "Allow microphone access when asked. No microphone? You can type instead." },
+  idle: { label: "Ready when you are", hint: "Allow microphone access when asked, or start by typing." },
   connecting: { label: "Connecting…", hint: "Setting up the line" },
   listening: { label: "Listening", hint: "Go ahead, Aria is listening" },
   thinking: { label: "Thinking", hint: "Aria is working on it" },
@@ -15,9 +15,15 @@ const STATES: Record<CallStatus, { label: string; hint: string }> = {
   error: { label: "Something went wrong", hint: "Try starting the call again" },
 };
 
-type Props = { status: CallStatus; levels: () => Levels };
+// In a typing call there is no mic, so the prompts point at the message box instead.
+const TYPING_STATES: Partial<Record<CallStatus, { label: string; hint: string }>> = {
+  listening: { label: "Your turn", hint: "Type your message below" },
+  speaking: { label: "Aria is speaking", hint: "She replies out loud, and her words appear below" },
+};
 
-export function VoiceOrb({ status, levels }: Props) {
+type Props = { status: CallStatus; typing: boolean; levels: () => Levels };
+
+export function VoiceOrb({ status, typing, levels }: Props) {
   const orbRef = useRef<HTMLDivElement>(null);
   const level = useRef(0);
 
@@ -35,7 +41,7 @@ export function VoiceOrb({ status, levels }: Props) {
     return () => cancelAnimationFrame(frame);
   }, [status, levels]);
 
-  const state = STATES[status];
+  const state = (typing && TYPING_STATES[status]) || STATES[status];
   return (
     <div className="flex flex-col items-center gap-5">
       <div ref={orbRef} className="aura-orb" data-state={status} aria-hidden="true">

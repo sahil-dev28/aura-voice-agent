@@ -51,12 +51,13 @@ export function CallWorkspace() {
         <Card>
           <CardContent className="flex flex-1 flex-col gap-4">
             <div className="aura-stage flex flex-col items-center gap-4 rounded-xl px-4 pt-6 pb-5">
-              <VoiceOrb status={state.status} levels={levels} />
+              <VoiceOrb status={state.status} typing={inputMode === "text"} levels={levels} />
               <CallControls
                 status={state.status}
                 muted={muted}
                 canMute={inputMode === "voice"}
-                onStart={start}
+                onStart={() => start()}
+                onStartTyping={() => start({ typing: true })}
                 onEnd={end}
                 onToggleMute={toggleMute}
               />

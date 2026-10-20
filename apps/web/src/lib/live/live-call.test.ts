@@ -336,6 +336,18 @@ describe("typing", () => {
     expect(h.onEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: "ERROR" }));
   });
 
+  it("skips the mic when the customer starts by typing", async () => {
+    mocks.getToken.mockResolvedValue({ token: "t", model: "m" });
+    const session = fakeSession();
+    mocks.connect.mockResolvedValueOnce(session);
+    const h = handlers();
+    await createLiveCall(h).start({ typing: true });
+
+    expect(mocks.startMicRecorder).not.toHaveBeenCalled();
+    expect(h.onInputMode).toHaveBeenLastCalledWith("text");
+    expect(sentTexts(session)[0]).toMatch(/chose to type/);
+  });
+
   it("still fails on other mic errors", async () => {
     mocks.getToken.mockResolvedValue({ token: "t", model: "m" });
     mocks.startMicRecorder.mockRejectedValueOnce(new Error("worklet failed"));

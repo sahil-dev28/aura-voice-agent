@@ -63,12 +63,15 @@ export function useLiveSession() {
 
   useEffect(() => () => call.dispose(), [call]);
 
-  const start = useCallback(() => {
-    setSummary({ status: "idle" });
-    setMuted(false);
-    setMetrics(null);
-    void call.start();
-  }, [call]);
+  const start = useCallback(
+    (options?: { typing?: boolean }) => {
+      setSummary({ status: "idle" });
+      setMuted(false);
+      setMetrics(null);
+      void call.start(options);
+    },
+    [call],
+  );
 
   const toggleMute = useCallback(() => {
     call.setMuted(!muted);

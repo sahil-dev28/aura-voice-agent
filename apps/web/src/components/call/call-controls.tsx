@@ -1,4 +1,4 @@
-import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
+import { Keyboard, Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 
 import { Button } from "@aura/ui/components/button";
 
@@ -9,18 +9,25 @@ type Props = {
   muted: boolean;
   canMute: boolean;
   onStart: () => void;
+  onStartTyping: () => void;
   onEnd: () => void;
   onToggleMute: () => void;
 };
 
-export function CallControls({ status, muted, canMute, onStart, onEnd, onToggleMute }: Props) {
+export function CallControls({ status, muted, canMute, onStart, onStartTyping, onEnd, onToggleMute }: Props) {
   const inCall = status === "connecting" || isLive(status);
   if (!inCall) {
     return (
-      <Button size="lg" onClick={onStart} className="w-full sm:w-auto">
-        <Phone data-icon="inline-start" />
-        {status === "idle" ? "Start Call" : "Start New Call"}
-      </Button>
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <Button size="lg" onClick={onStart}>
+          <Phone data-icon="inline-start" />
+          {status === "idle" ? "Start Call" : "Start New Call"}
+        </Button>
+        <Button size="lg" variant="outline" onClick={onStartTyping}>
+          <Keyboard data-icon="inline-start" />
+          Start by typing
+        </Button>
+      </div>
     );
   }
   return (
