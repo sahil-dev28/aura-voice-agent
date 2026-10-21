@@ -7,7 +7,7 @@ import type { CallStatus } from "@/lib/live/sessionReducer";
 
 const STATES: Record<CallStatus, { label: string; hint: string }> = {
   idle: { label: "Ready when you are", hint: "Allow microphone access when asked, or start by typing." },
-  connecting: { label: "Connecting…", hint: "Setting up the line" },
+  connecting: { label: "Connecting…", hint: "Allow the microphone if your browser asks" },
   listening: { label: "Listening", hint: "Go ahead, Aria is listening" },
   thinking: { label: "Thinking", hint: "Aria is working on it" },
   speaking: { label: "Aria is speaking", hint: "Speak any time to interrupt her" },
@@ -17,6 +17,7 @@ const STATES: Record<CallStatus, { label: string; hint: string }> = {
 
 // In a typing call there is no mic, so the prompts point at the message box instead.
 const TYPING_STATES: Partial<Record<CallStatus, { label: string; hint: string }>> = {
+  connecting: { label: "Connecting…", hint: "Setting up the line" },
   listening: { label: "Your turn", hint: "Type your message below" },
   speaking: { label: "Aria is speaking", hint: "She replies out loud, and her words appear below" },
 };

@@ -144,13 +144,13 @@ describe("escalate_to_human", () => {
   });
 });
 
-async function startLiveCall() {
+async function startLiveCall(options?: { typing?: boolean }) {
   mocks.getToken.mockResolvedValue({ token: "t", model: "m" });
   const session = fakeSession();
   mocks.connect.mockResolvedValueOnce(session);
   const h = handlers();
   const call = createLiveCall(h);
-  await call.start();
+  await call.start(options);
   const { onmessage, onclose } = mocks.connect.mock.calls[0]?.[0].callbacks as Callbacks;
   return { h, call, session, onmessage, onclose };
 }
@@ -346,6 +346,16 @@ describe("typing", () => {
     expect(mocks.startMicRecorder).not.toHaveBeenCalled();
     expect(h.onInputMode).toHaveBeenLastCalledWith("text");
     expect(sentTexts(session)[0]).toMatch(/chose to type/);
+  });
+
+  it("waits longer before asking if a typing customer is still there", async () => {
+    const { session, onmessage } = await startLiveCall({ typing: true });
+    vi.useFakeTimers();
+    onmessage(agentDone);
+    vi.advanceTimersByTime(29_999);
+    expect(sentTexts(session)).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(sentTexts(session)[1]).toMatch(/still there/);
   });
 
   it("still fails on other mic errors", async () => {

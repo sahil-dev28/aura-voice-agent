@@ -21,7 +21,7 @@ export function MessageBox({ typingOnly, onSend, onTyping }: Props) {
     <form onSubmit={submit} className="flex flex-col gap-2">
       {typingOnly && (
         <p className="text-muted-foreground text-sm">
-          Your microphone isn&apos;t available, so type your messages here. Aria will still reply out loud.
+          Type your messages here. Aria replies out loud and in writing.
         </p>
       )}
       <div className="flex gap-2">

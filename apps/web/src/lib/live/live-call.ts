@@ -31,6 +31,7 @@ const TYPING_GREETING =
 const CHOSE_TYPING_GREETING =
   "The customer has just joined the call. They chose to type their messages instead of speaking. Greet them now.";
 const SILENCE_MS = 10_000;
+const TYPING_SILENCE_MS = 30_000;
 const SPEECH_LEVEL = 0.02;
 const GOODBYE_GRACE_MS = 10_000;
 const CALL_LIMIT_MS = 10 * 60_000;
@@ -109,6 +110,8 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     handlers.onFinished({ transcript, toolEvents, metrics: metrics.finish(inputMode) });
   };
 
+  const silenceMs = () => (inputMode === "text" ? TYPING_SILENCE_MS : SILENCE_MS);
+
   const end = () => finish({ type: "END" });
   const fail = (message: string) => finish({ type: "ERROR", message });
 
@@ -135,14 +138,14 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     }
     if (muted || busy || callState.status !== "listening") return;
     if (closing) return end();
-    silenceTimer = setTimeout(onSilence, SILENCE_MS);
+    silenceTimer = setTimeout(onSilence, silenceMs());
   };
 
   // The transcript arrives late, so mic loudness is what tells us the customer is talking.
   const heardCustomer = () => {
     if (!active || muted || busy || callState.status !== "listening" || closing) return;
     clearTimeout(silenceTimer);
-    silenceTimer = setTimeout(onSilence, SILENCE_MS);
+    silenceTimer = setTimeout(onSilence, silenceMs());
   };
 
   // Muted: keep the mic open but send nothing, and don't treat the quiet as the customer leaving.
@@ -239,7 +242,6 @@ export function createLiveCall(handlers: LiveCallHandlers) {
     }
   }
 
-  // Opens a Live session and makes it the current one. The previous session, if any, is closed.
   async function connect(run: number, handle?: string): Promise<boolean> {
     const { token, model } = await getToken(handle);
     if (run !== runId || !active) return false;
