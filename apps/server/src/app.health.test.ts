@@ -20,3 +20,17 @@ describe("GET /api/health", () => {
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 });
+
+describe("errors", () => {
+  it("answers unknown routes with JSON", async () => {
+    const res = await request(app).get("/api/nope");
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "Not found" });
+  });
+
+  it("answers malformed JSON without leaking a stack trace", async () => {
+    const res = await request(app).post("/api/summary").set("Content-Type", "application/json").send("not json");
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "Request body is not valid JSON" });
+  });
+});
