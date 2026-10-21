@@ -82,4 +82,12 @@ export const scenarios: Scenario[] = [
       replyMatches: [/([ऀ-ॿ]|\b(aapka|hai|hoga|kar|tak|aaj)\b)/i],
     },
   },
+  {
+    name: "hinglish-switch",
+    turns: ["What is your shipping fee?", "Accha, aur COD milta hai kya 3000 ke order pe?"],
+    expect: {
+      noTools: true,
+      replyMatches: [/2,?500/, /([ऀ-ॿ]|\b(hai|nahi|sirf|ke liye|milega)\b)/i],
+    },
+  },
 ];

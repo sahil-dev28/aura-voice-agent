@@ -92,4 +92,11 @@ describe("runConversation", () => {
       /did not finish/,
     );
   });
+
+  it("fails when the session never opens", async () => {
+    const open = () => new Promise<never>(() => {});
+    await expect(runConversation(["Hello?"], { open, callTool: vi.fn(), turnTimeoutMs: 50 })).rejects.toThrow(
+      /did not open/,
+    );
+  });
 });

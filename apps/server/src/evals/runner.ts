@@ -33,6 +33,7 @@ export async function runConversation(turns: string[], deps: RunnerDeps): Promis
   let calledTool = false;
   let spokeAfterTool = false;
   let finishTurn: (() => void) | null = null;
+  const timeoutMs = deps.turnTimeoutMs ?? 45_000;
 
   // A turn is over at turnComplete, but only once any tool result has gone back and Aria has answered it.
   const maybeFinish = () => {
@@ -62,7 +63,7 @@ export async function runConversation(turns: string[], deps: RunnerDeps): Promis
     session.sendToolResponse({ functionResponses });
   }
 
-  const session = await deps.open((message) => {
+  const opening = deps.open((message) => {
     const text = message.serverContent?.outputTranscription?.text;
     if (text) {
       turnText += text;
@@ -71,12 +72,18 @@ export async function runConversation(turns: string[], deps: RunnerDeps): Promis
     if (message.toolCall?.functionCalls?.length) void runTools(message.toolCall.functionCalls);
     if (message.serverContent?.turnComplete) maybeFinish();
   });
+  let openTimer: ReturnType<typeof setTimeout> | undefined;
+  const session = await Promise.race([
+    opening,
+    new Promise<never>((_, reject) => {
+      openTimer = setTimeout(() => reject(new Error(`Live session did not open within ${timeoutMs} ms`)), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(openTimer));
 
   async function turn(text: string) {
     turnText = "";
     calledTool = false;
     spokeAfterTool = false;
-    const timeoutMs = deps.turnTimeoutMs ?? 45_000;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`Turn "${text}" did not finish within ${timeoutMs} ms`)), timeoutMs);
       finishTurn = () => {

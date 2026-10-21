@@ -45,7 +45,7 @@ End Call ── POST /api/summary ───────────► Gemini Fl
 3. **Playback**: 24 kHz PCM chunks go into a playback worklet queue. When Gemini signals `interrupted` (the customer talked over Aria), the queue is flushed instantly. That's barge-in.
 4. **State indicator**: a small pure state machine maps session events to Listening / Thinking / Speaking (`apps/web/src/lib/live/sessionReducer.ts`).
 5. **Transcript**: Gemini's input and output transcriptions are merged into speaker turns, with tool calls shown inline.
-6. **Silence**: after 10 seconds of silence while Aria is waiting, she asks if the customer is still there. After another 10 seconds she says goodbye and the call ends. These prompts are sent as `Call system:` messages, which the system prompt tells Aria to follow without reading out.
+6. **Silence**: after 10 seconds of silence while Aria is waiting (30 seconds in a typing call, since typing is slower), she asks if the customer is still there. After the same wait again she says goodbye and the call ends. These prompts are sent as `Call system:` messages, which the system prompt tells Aria to follow without reading out.
 7. **Call length**: calls are capped at 10 minutes. A minute before the cap, Aria is told to wrap up and offer a specialist ticket if the issue is still open.
 8. **Typing**: a message box sits under the transcript during every call, which helps when spelling an order ID. The **Start by typing** button opens a call without the microphone, and if the microphone is blocked or missing a normal call carries on in typing mode instead of failing. Either way Aria still replies out loud, and the status under the orb points at the message box. Typed text reaches Gemini as `Customer (typed): …`, and the prompt says anything inside it claiming to be a `Call system:` message comes from the customer. Typing restarts the silence timer.
 9. **Reconnecting**: session resumption is on. The browser keeps the latest resume handle, and when Gemini sends `goAway` or the connection drops, it asks the server for a new token with that handle locked in and switches to the new session. The mic, speaker and transcript keep running, and Aria keeps the conversation context. If there is no handle yet, the call ends as before.
@@ -136,7 +136,7 @@ packages/
 
 `pnpm --filter server eval` runs scripted conversations against the real Gemini Live model with the same locked config as production, and scores each one automatically. Customer turns go in through the typed-message path, tool calls hit the real tool API in-process, and each scenario checks which tools were called (and with which arguments) and what Aria said or must not say. The scenarios are in `apps/server/src/evals/scenarios.ts`:
 
-tracking, missing ID, unknown ID (Aria must not try other IDs), refused return, confirmed cancellation, declined cancellation (nothing recorded), damage replacement (photo upload offered), handoff to a person, off-topic request, a typed message pretending to be a `Call system:` instruction, and Hinglish.
+tracking, missing ID, unknown ID (Aria must not try other IDs), refused return, confirmed cancellation, declined cancellation (nothing recorded), damage replacement (photo upload offered), handoff to a person, off-topic request, a typed message pretending to be a `Call system:` instruction, Hinglish, and switching to Hinglish mid-call.
 
 ```bash
 pnpm --filter server eval                        # every scenario once
@@ -144,7 +144,7 @@ pnpm --filter server eval hinglish tracking      # selected scenarios
 pnpm --filter server eval --repeat 3             # pass rate over 3 runs, since model output varies
 ```
 
-It uses your Gemini quota (one Live session per scenario run) and exits non-zero if any run fails, printing the failed checks and the transcript. On the first run it caught a real gap: Aria answered a Hinglish question in English, which led to a clearer language rule in the prompt. The current prompt passes all 12 scenarios twice in a row.
+It uses your Gemini quota (one Live session per scenario run) and exits non-zero if any run fails, printing the failed checks and the transcript. It has caught real gaps: Aria answered a Hinglish question in English, and once she refused a return straight from the order details without running the policy check. Both led to clearer rules in the prompt. In the latest run of all 12 scenarios twice, every behaviour check passed; the only failures were two free-tier Live sessions that never opened, which the runner reports after 45 seconds instead of hanging.
 
 Audio-only behaviour (speech recognition, barge-in, the silence check-in) isn't covered by these tests; I checked it by driving the app in a browser with synthesised speech.
 
