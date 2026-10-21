@@ -4,7 +4,6 @@ export type AudioPlayer = {
   enqueue: (base64Pcm24k: string) => void;
   flush: () => void;
   close: () => void;
-  // Loudness of what is playing right now, for the orb.
   level: () => number;
 };
 

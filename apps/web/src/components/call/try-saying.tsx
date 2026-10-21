@@ -16,7 +16,6 @@ const PROMPTS: { icon: LucideIcon; text: string }[] = [
 
 const ORDER_REF = /(ORD-\d+|\border 103\b)/;
 
-// Order references are set in a code style so testers can spot which order a prompt uses.
 function Highlighted({ text }: { text: string }) {
   return (
     <>
