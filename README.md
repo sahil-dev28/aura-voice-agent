@@ -2,7 +2,9 @@
 
 Talk to **Aria**, a voice customer-support agent for the fictional D2C brand Aura Skincare, right in the browser.
 
-**Live demo:** <web URL> · **API:** <server URL>
+**Live demo:** https://aura-voice-agent-web.vercel.app · **API:** https://aura-voice-agent-izs3.onrender.com/api/health
+
+The API runs on Render's free tier, which sleeps when idle. The first call after a quiet spell can take up to a minute to connect while it wakes; the page keeps retrying, so just wait on "Connecting…".
 
 ## Approach
 
@@ -27,7 +29,7 @@ End Call ── POST /api/summary ───────────► Gemini Fl
 
 **Why this design**
 - Speech-to-speech removes the STT → LLM → TTS hops, which is where most voice-agent latency comes from. Voice activity detection and interruption are built in.
-- The browser connects directly, so the server never relays audio. It stays a small, stateless HTTP API that runs as a serverless function.
+- The browser connects directly, so the server never relays audio. It stays a small, stateless HTTP API that runs on any Node host (Render here) or as a serverless function.
 - The ephemeral token is single-use, expires in 30 minutes, and **locks** the session configuration. Nobody can swap the system prompt or tools from devtools, and the real API key never reaches the browser.
 
 **Alternatives I considered**
